@@ -12,7 +12,7 @@ const app = express();
 // Connect to Prisma
 prisma.$connect()
   .then(() => console.log('Connected to database'))
-  .catch((err) => {
+  .catch((err: Error) => {
     console.error('Database connection failed:', err);
     process.exit(1);
   });
