@@ -1,5 +1,4 @@
 ﻿import { PrismaClient } from '@prisma/client';
-import { Vehicle, Trip, Maintenance } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -9,7 +8,7 @@ export class TripService {
    * @param vehicle The vehicle data
    * @returns The CPK value
    */
-  static calculateCPK(vehicle: Vehicle): number {
+  static calculateCPK(vehicle: any): number {
     if (vehicle.vidaUtilKm <= 0) {
       throw new Error('Vida útil en km debe ser mayor a cero');
     }
@@ -25,7 +24,7 @@ export class TripService {
    * @param vehicle The vehicle data
    * @returns The net profit
    */
-  static getNetProfit(trip: Trip, vehicle: Vehicle): number {
+  static getNetProfit(trip: any, vehicle: any): number {
     if (trip.kmRecorridos < 0 || trip.ingresoBruto < 0 || trip.gastoCombustible < 0) {
       throw new Error('Valores de viaje deben ser no negativos');
     }
@@ -39,7 +38,7 @@ export class TripService {
    * @param maintenances List of maintenances
    * @returns List of alerts
    */
-  static checkMaintenanceAlerts(vehicle: Vehicle, maintenances: Maintenance[]): string[] {
+  static checkMaintenanceAlerts(vehicle: any, maintenances: any[]): string[] {
     if (!maintenances || maintenances.length === 0) {
       return [];
     }
@@ -87,9 +86,9 @@ export class TripService {
       },
     });
 
-    return trips.reduce((total: number, trip) => {
+    return trips.reduce((total: number, trip: any) => {
       const vehicle = trip.vehicle;
-      return total + this.getNetProfit(trip as Trip, vehicle);
+      return total + this.getNetProfit(trip, vehicle);
     }, 0);
   }
 }
