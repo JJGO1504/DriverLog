@@ -1,5 +1,5 @@
 ﻿import { PrismaClient } from '@prisma/client';
-import type { Vehicle, Trip, Maintenance } from '@prisma/client';
+import { Vehicle, Trip, Maintenance } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
@@ -87,6 +87,9 @@ export class TripService {
       },
     });
 
-    return trips.reduce((total: number, trip) => total + this.getNetProfit(trip, trip.vehicle), 0);
+    return trips.reduce((total: number, trip) => {
+      const vehicle = trip.vehicle;
+      return total + this.getNetProfit(trip as Trip, vehicle);
+    }, 0);
   }
 }
