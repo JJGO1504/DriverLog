@@ -5,6 +5,8 @@ import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { PrismaClient } from '@prisma/client';
 import tripRoutes from './routes/tripRoutes';
+import userRoutes from './routes/userRoutes';
+import adminRoutes from './routes/adminRoutes';
 
 const prisma = new PrismaClient();
 const app = express();
@@ -43,6 +45,8 @@ app.use(express.urlencoded({ extended: true }));
 
 // Routes
 app.use('/api', tripRoutes);
+app.use('/api', userRoutes);
+app.use('/api/admin', adminRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

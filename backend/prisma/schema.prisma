@@ -14,6 +14,7 @@ model User {
   id    Int    @id @default(autoincrement())
   nombre String
   email String @unique
+  role  String @default("USER")
   trips Trip[]
 
   @@map("users")

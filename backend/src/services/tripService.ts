@@ -4,11 +4,10 @@ const prisma = new PrismaClient();
 
 export class TripService {
   /**
-   * Calculate Cost per Kilometer (CPK)
-   * @param vehicle The vehicle data
-   * @returns The CPK value
+   * Calcula la depreciación por kilómetro del vehículo.
+   * Depreciación por KM = (valorCompra - valorReventaEstimado) / vidaUtilKm
    */
-  static calculateCPK(vehicle: any): number {
+  static calculateDepreciationPerKm(vehicle: any): number {
     if (vehicle.vidaUtilKm <= 0) {
       throw new Error('Vida útil en km debe ser mayor a cero');
     }
@@ -19,17 +18,15 @@ export class TripService {
   }
 
   /**
-   * Get Net Profit for a trip
-   * @param trip The trip data
-   * @param vehicle The vehicle data
-   * @returns The net profit
+   * Calcula la ganancia neta real de un viaje.
+   * Ganancia Neta Real = ingresoBruto - gastoCombustible - (kmRecorridos * depreciaciónPorKm)
    */
-  static getNetProfit(trip: any, vehicle: any): number {
+  static calculateRealNetProfit(trip: any, vehicle: any): number {
     if (trip.kmRecorridos < 0 || trip.ingresoBruto < 0 || trip.gastoCombustible < 0) {
       throw new Error('Valores de viaje deben ser no negativos');
     }
-    const cpk = this.calculateCPK(vehicle);
-    return trip.ingresoBruto - trip.gastoCombustible - (trip.kmRecorridos * cpk);
+    const depreciationPerKm = this.calculateDepreciationPerKm(vehicle);
+    return trip.ingresoBruto - trip.gastoCombustible - (trip.kmRecorridos * depreciationPerKm);
   }
 
   /**
@@ -88,7 +85,7 @@ export class TripService {
 
     return trips.reduce((total: number, trip: any) => {
       const vehicle = trip.vehicle;
-      return total + this.getNetProfit(trip, vehicle);
+      return total + this.calculateRealNetProfit(trip, vehicle);
     }, 0);
   }
 }

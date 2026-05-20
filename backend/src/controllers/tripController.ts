@@ -48,8 +48,8 @@ export class TripController {
         },
       });
 
-      // Calculate net profit
-      const netProfit = TripService.getNetProfit(trip, trip.vehicle);
+      // Calculate real net profit
+      const netProfit = TripService.calculateRealNetProfit(trip, trip.vehicle);
 
       res.status(201).json({ trip, netProfit });
     } catch (error: any) {
