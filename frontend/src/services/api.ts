@@ -16,3 +16,15 @@ export function getMaintenanceAlerts(role: Role) {
 export function submitTrip(trip: Omit<Trip, 'id'>) {
   return api.post('/trips', trip, { headers: { 'x-user-role': 'USER' } }).then(response => response.data);
 }
+
+export function createUser(payload: { nombre: string; email: string; password: string }) {
+  return api.post('/users', payload).then(res => res.data);
+}
+
+export function createVehicle(payload: { marca: string; modelo: string; anio: number }) {
+  return api.post('/vehicles', payload).then(res => res.data);
+}
+
+export function createVehicleForUser(userId: number | string, payload: { marca: string; modelo: string; anio: number }) {
+  return api.post(`/users/${userId}/vehicles`, payload).then(res => res.data);
+}

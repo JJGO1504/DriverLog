@@ -11,17 +11,18 @@ datasource db {
 }
 
 model User {
-  id    Int    @id @default(autoincrement())
-  nombre String
-  email String @unique
-  role  String @default("USER")
-  trips Trip[]
+  id       Int       @id @default(autoincrement())
+  nombre   String
+  email    String    @unique
+  role     String    @default("USER")
+  trips    Trip[]
+  vehicles Vehicle[] @relation("UserVehicles")
 
   @@map("users")
 }
 
 model Vehicle {
-  id                   Int     @id @default(autoincrement())
+  id                   Int    @id @default(autoincrement())
   marca                String
   modelo               String
   anio                 Int
@@ -30,7 +31,10 @@ model Vehicle {
   valorReventaEstimado Float
   vidaUtilKm           Float
   trips                Trip[]
+  ownerId              Int?
+  owner                User?  @relation("UserVehicles", fields: [ownerId], references: [id])
 
+  @@index([ownerId])
   @@map("vehicles")
 }
 
@@ -45,17 +49,17 @@ model Trip {
   user             User     @relation(fields: [userId], references: [id])
   vehicle          Vehicle  @relation(fields: [vehicleId], references: [id])
 
-  @@map("trips")
   @@index([userId])
   @@index([vehicleId])
   @@index([fecha])
+  @@map("trips")
 }
 
 model Maintenance {
-  id             Int     @id @default(autoincrement())
-  descripcion    String
-  intervaloKm    Float
-  costoEstimado  Float
+  id            Int    @id @default(autoincrement())
+  descripcion   String
+  intervaloKm   Float
+  costoEstimado Float
 
   @@map("maintenances")
 }
