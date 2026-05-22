@@ -12,8 +12,10 @@ export interface Vehicle {
   marca: string;
   modelo: string;
   anio: number;
+  placa: string;
   kilometrajeActual: number;
   valorCompra: number;
+  valorAlquiler: number;
   valorReventaEstimado: number;
   vidaUtilKm: number;
 }

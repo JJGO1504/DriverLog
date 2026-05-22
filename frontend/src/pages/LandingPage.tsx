@@ -1,116 +1,134 @@
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 
+const streakBg = {
+  background: `
+    radial-gradient(ellipse 100% 40% at 0% 50%, rgba(6,182,212,0.30) 0%, transparent 65%),
+    radial-gradient(ellipse 100% 35% at 100% 45%, rgba(236,72,153,0.25) 0%, transparent 60%),
+    radial-gradient(ellipse 80% 25% at 20% 30%, rgba(56,189,248,0.18) 0%, transparent 55%),
+    radial-gradient(ellipse 70% 20% at 85% 60%, rgba(168,85,247,0.15) 0%, transparent 50%),
+    radial-gradient(ellipse 60% 30% at 35% 70%, rgba(6,182,212,0.10) 0%, transparent 45%),
+    radial-gradient(ellipse 50% 20% at 60% 20%, rgba(236,72,153,0.08) 0%, transparent 40%),
+    linear-gradient(180deg, #030712 0%, #030712 100%)
+  `,
+};
+
+const features = [
+  {
+    title: 'Monitoreo en Tiempo Real',
+    desc: 'Seguimiento preciso de rutas, tiempos de viaje y estados de conexión. Controla cada kilómetro de tu trayecto con sincronización en la nube.',
+  },
+  {
+    title: 'Análisis Financiero Avanzado',
+    desc: 'Optimiza tus ingresos y reduce costos operativos. Visualiza gráficos detallados de gastos de combustible, mantenimiento y rendimiento neto por ruta.',
+  },
+  {
+    title: 'Optimización del Vehículo',
+    desc: 'Registra y programa alertas de mantenimiento preventivo basado en el kilometraje real. Prolonga la vida útil de tu herramienta de trabajo.',
+  },
+];
+
 export default function LandingPage() {
   const navigate = useNavigate();
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#050505] text-white">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.12),transparent_20%),radial-gradient(circle_at_bottom_right,rgba(168,85,247,0.08),transparent_14%)]" />
-      <div className="pointer-events-none absolute bottom-0 right-0 h-[400px] w-[600px] bg-gradient-to-br from-cyan-500/10 via-purple-500/5 to-transparent blur-[120px]" />
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-2 bg-gradient-to-r from-cyan-400/70 via-transparent to-purple-400/70 blur-xl" />
+    <div className="relative min-h-screen text-white overflow-hidden" style={streakBg}>
+      {/* Traffic light streak lines */}
+      <div aria-hidden className="fixed inset-0 pointer-events-none overflow-hidden">
+        <div className="absolute left-[-5%] top-[18%] h-[2px] w-[55%] bg-gradient-to-r from-transparent via-cyan-400/40 to-transparent blur-sm rotate-[-6deg]" />
+        <div className="absolute right-[-5%] top-[32%] h-[2px] w-[55%] bg-gradient-to-l from-transparent via-fuchsia-400/35 to-transparent blur-sm rotate-[4deg]" />
+        <div className="absolute left-[10%] top-[48%] h-[2px] w-[45%] bg-gradient-to-r from-transparent via-sky-400/30 to-transparent blur-sm rotate-[-2deg]" />
+        <div className="absolute right-[5%] top-[62%] h-[2px] w-[50%] bg-gradient-to-l from-transparent via-pink-400/30 to-transparent blur-sm rotate-[3deg]" />
+        <div className="absolute left-[-3%] top-[78%] h-[2px] w-[50%] bg-gradient-to-r from-transparent via-cyan-400/25 to-transparent blur-sm rotate-[5deg]" />
+        <div className="absolute right-[0%] top-[12%] h-[1.5px] w-[35%] bg-gradient-to-l from-transparent via-fuchsia-300/20 to-transparent blur-[2px] rotate-[8deg]" />
+        <div className="absolute left-[40%] top-[88%] h-[1.5px] w-[30%] bg-gradient-to-r from-transparent via-sky-400/20 to-transparent blur-[2px] rotate-[-4deg]" />
+        <div className="absolute -top-40 -left-40 h-[500px] w-[500px] rounded-full bg-cyan-500/12 blur-[160px]" />
+        <div className="absolute -bottom-40 -right-40 h-[450px] w-[450px] rounded-full bg-fuchsia-500/10 blur-[150px]" />
+      </div>
 
-      <div className="relative z-10 mx-auto max-w-6xl px-6 py-6">
-        <header className="flex items-center justify-between rounded-full px-2 py-3">
-          <div className="flex items-center gap-3">
-            <span className="flex h-3 w-3 items-center justify-center rounded-full bg-cyan-400 shadow-[0_0_12px_rgba(34,211,238,0.85)]" />
-            <span className="text-sm font-semibold text-cyan-300">DriverLog</span>
-          </div>
-          <div />
-        </header>
+      {/* Navbar */}
+      <nav className="relative z-20 mx-auto flex max-w-6xl items-center justify-between px-6 py-6 lg:px-8">
+        <div className="flex items-center gap-3">
+          <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-cyan-500/15 border border-cyan-400/30">
+            <span className="text-cyan-400 text-sm font-black">D</span>
+          </span>
+          <span className="text-lg font-bold tracking-tight text-white">DriverLog</span>
+        </div>
+        <button
+          onClick={() => navigate('/register')}
+          className="btn-premium"
+        >
+          Registrar Usuario
+        </button>
+      </nav>
 
-        <main className="flex min-h-[calc(100vh-120px)] items-center justify-center py-12">
-          <div className="w-full max-w-6xl">
-            <section className="mb-8 grid w-full grid-cols-1 gap-4 sm:grid-cols-3">
-              <div className="bg-[#0d1117]/40 border border-cyan-500/20 rounded-xl p-4 text-center">
-                <div className="text-2xl font-extrabold text-cyan-300">1,240+</div>
-                <div className="text-xs text-gray-400 mt-1">Conductores Activos</div>
-              </div>
-              <div className="bg-[#0d1117]/40 border border-cyan-500/20 rounded-xl p-4 text-center">
-                <div className="text-2xl font-extrabold text-green-400">45.2K</div>
-                <div className="text-xs text-gray-400 mt-1">Viajes Monitoreados</div>
-              </div>
-              <div className="bg-[#0d1117]/40 border border-cyan-500/20 rounded-xl p-4 text-center">
-                <div className="text-2xl font-extrabold text-cyan-300">99.8%</div>
-                <div className="text-xs text-gray-400 mt-1">Precisión del Sistema</div>
-              </div>
-            </section>
+      {/* Hero + Content */}
+      <main className="relative z-10 mx-auto flex min-h-[calc(100vh-80px)] max-w-6xl flex-col items-center justify-center px-6 py-16">
+        {/* Statistics row */}
+        <motion.div
+          initial={{ opacity: 0, y: -12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="mb-14 grid w-full max-w-3xl grid-cols-3 gap-4"
+        >
+          {[
+            { value: '1,500+', label: 'Conductores Activos' },
+            { value: '2.4M', label: 'Kilómetros Monitoreados' },
+            { value: '99.9%', label: 'Precisión de Datos' },
+          ].map((s) => (
+            <div key={s.label} className="card py-4 text-center">
+              <div className="text-xl font-bold text-cyan-300 sm:text-2xl">{s.value}</div>
+              <div className="mt-0.5 text-[11px] font-medium uppercase tracking-wider text-gray-500">{s.label}</div>
+            </div>
+          ))}
+        </motion.div>
 
+        {/* Hero */}
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.7, ease: 'easeOut' }}
+          className="mb-12 text-center"
+        >
+          <h1 className="heading-xl sm:text-5xl md:text-6xl">
+            Bienvenido a <span className="text-cyan-400">DriverLog</span>
+          </h1>
+          <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-gray-400 sm:text-lg">
+            Tu Solución Integral para la Gestión de Flotas y Control de Rutas
+          </p>
+        </motion.div>
+
+        {/* Feature cards */}
+        <div className="grid w-full gap-6 sm:grid-cols-3">
+          {features.map((f, i) => (
             <motion.div
+              key={f.title}
               initial={{ opacity: 0, y: 24 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.7, ease: 'easeOut' }}
-              className="relative mx-auto w-full rounded-[32px] border border-cyan-400/30 bg-[#0c1320]/80 p-8 shadow-[0_0_30px_rgba(6,182,212,0.25)] backdrop-blur-md"
+              transition={{ duration: 0.5, delay: 0.1 * i }}
+              className="card p-6 transition hover:border-cyan-400/40"
             >
-              <div className="space-y-6 text-center">
-                <p className="text-xs uppercase tracking-[0.35em] text-cyan-300/90">Comienza tu Viaje en DriverLog</p>
-                <h1 className="text-white text-4xl font-extrabold sm:text-5xl">Bienvenido a DriverLog</h1>
-                <h2 className="text-cyan-200 text-lg font-medium">Tu Solución Integral para la Gestión de Flotas</h2>
-                </h1>
-                <p className="mx-auto max-w-xl text-sm text-gray-400 leading-7">
-                  Ingresa los datos clave para crear la cuenta del conductor y activar el flujo de control de viajes.
-                </p>
-              </div>
-
-              <div className="mt-6 space-y-4">
-                <div className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-[inset_0_0_30px_rgba(0,255,255,0.06)]">
-                  <label className="block text-xs uppercase tracking-[0.35em] text-cyan-300 mb-2">Nombre Completo</label>
-                  <input
-                    type="text"
-                    placeholder="Ej. Ana Gómez"
-                    className="neon-input w-full bg-transparent border border-white/10 px-4 py-3 text-white placeholder:text-slate-500 focus:border-cyan-400/80"
-                  />
-                </div>
-
-                <div className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-[inset_0_0_30px_rgba(0,255,255,0.06)]">
-                  <label className="block text-xs uppercase tracking-[0.35em] text-cyan-300 mb-2">Correo Electrónico</label>
-                  <p className="text-[11px] text-slate-500 mb-2">(Para estadísticas)</p>
-                  <input
-                    type="email"
-                    placeholder="ana.gomez@email.com"
-                    className="neon-input w-full bg-transparent border border-white/10 px-4 py-3 text-white placeholder:text-slate-500 focus:border-cyan-400/80"
-                  />
-                </div>
-
-                <div className="rounded-3xl border border-white/10 bg-white/5 p-4 shadow-[inset_0_0_30px_rgba(0,255,255,0.06)]">
-                  <label className="block text-xs uppercase tracking-[0.35em] text-cyan-300 mb-2">Modelo del Vehículo</label>
-                  <input
-                    type="text"
-                    placeholder="Ej. Toyota Hilux 2024"
-                    className="neon-input w-full bg-transparent border border-white/10 px-4 py-3 text-white placeholder:text-slate-500 focus:border-cyan-400/80"
-                  />
-                </div>
-              </div>
-
-              <div className="mt-8 grid gap-4 sm:grid-cols-3">
-                <div className="rounded-lg bg-white/3 p-4 text-left">
-                  <div className="text-cyan-300 font-semibold">Monitoreo Financiero</div>
-                  <div className="text-sm text-gray-300 mt-2">Control exacto de ingresos y gastos de ruta en tiempo real.</div>
-                </div>
-                <div className="rounded-lg bg-white/3 p-4 text-left">
-                  <div className="text-cyan-300 font-semibold">Optimización</div>
-                  <div className="text-sm text-gray-300 mt-2">Métricas avanzadas para mejorar el rendimiento de tu vehículo.</div>
-                </div>
-                <div className="rounded-lg bg-white/3 p-4 text-left">
-                  <div className="text-cyan-300 font-semibold">Privacidad</div>
-                  <div className="text-sm text-gray-300 mt-2">Cifrado de extremo a extremo en tus registros históricos.</div>
-                </div>
-              </div>
-
-              <div className="mt-8">
-                <button
-                  onClick={() => navigate('/register')}
-                  className="w-full rounded-full bg-cyan-400 px-6 py-4 text-lg font-bold text-black shadow-[0_8px_30px_rgba(34,211,238,0.5)] hover:scale-[1.02] transition"
-                >
-                  Registrar Usuario
-                </button>
-              </div>
-
-              <p className="mt-6 text-center text-sm text-slate-400">¿Ya tienes cuenta? <span className="font-semibold text-cyan-300">Inicia Sesión</span></p>
+              <h3 className="heading-lg mb-3 text-cyan-300">{f.title}</h3>
+              <p className="text-sm leading-relaxed text-gray-400">{f.desc}</p>
             </motion.div>
-          </div>
-        </main>
-      </div>
+          ))}
+        </div>
+
+        {/* CTA */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.9, duration: 0.5 }}
+          className="mt-14"
+        >
+          <button
+            onClick={() => navigate('/register')}
+            className="btn-premium px-10 py-3.5 text-base"
+          >
+            Registrar Usuario
+          </button>
+        </motion.div>
+      </main>
     </div>
   );
 }

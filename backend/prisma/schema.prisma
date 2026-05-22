@@ -14,6 +14,7 @@ model User {
   id       Int       @id @default(autoincrement())
   nombre   String
   email    String    @unique
+  password String
   role     String    @default("USER")
   trips    Trip[]
   vehicles Vehicle[] @relation("UserVehicles")
@@ -26,8 +27,10 @@ model Vehicle {
   marca                String
   modelo               String
   anio                 Int
+  placa                String @default("")
   kilometrajeActual    Float
   valorCompra          Float
+  valorAlquiler        Float  @default(0)
   valorReventaEstimado Float
   vidaUtilKm           Float
   trips                Trip[]
