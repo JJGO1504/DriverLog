@@ -1,11 +1,31 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
+import Joi from 'joi';
 
 const prisma = new PrismaClient();
 
 const CATEGORIAS = ['MOTOR', 'FRENOS', 'SUSPENSION', 'LLANTAS', 'OTROS'] as const;
 
-const PLAN_KIA_RIO_XCITE = [
+const createSchema = Joi.object({
+  descripcion: Joi.string().trim().min(1).required(),
+  categoria: Joi.string().valid(...CATEGORIAS).default('OTROS'),
+  intervaloKm: Joi.number().positive().required(),
+  costoEstimado: Joi.number().min(0).required(),
+  vehicleId: Joi.number().integer().positive().allow(null),
+});
+
+const updateSchema = Joi.object({
+  descripcion: Joi.string().trim().min(1),
+  categoria: Joi.string().valid(...CATEGORIAS),
+  intervaloKm: Joi.number().positive(),
+  costoEstimado: Joi.number().min(0),
+});
+
+const seedSchema = Joi.object({
+  vehicleId: Joi.number().integer().positive().required(),
+});
+
+const PLAN_KIA_RIO_XCITE: Array<{ descripcion: string; categoria: string; intervaloKm: number; costoEstimado: number }> = [
   { descripcion: 'Cambio de aceite y filtro', categoria: 'MOTOR', intervaloKm: 5000, costoEstimado: 180000 },
   { descripcion: 'Rotación y balanceo de llantas', categoria: 'LLANTAS', intervaloKm: 10000, costoEstimado: 80000 },
   { descripcion: 'Revisión de frenos (pastillas y discos)', categoria: 'FRENOS', intervaloKm: 15000, costoEstimado: 250000 },
@@ -21,11 +41,11 @@ const PLAN_KIA_RIO_XCITE = [
 export class MaintenanceController {
   static async list(req: Request, res: Response) {
     try {
-      const { vehicleId } = req.query;
-      const where = vehicleId ? { vehicleId: Number(vehicleId) } : {};
+      const vehicleId = req.query.vehicleId ? Number(req.query.vehicleId) : undefined;
+      const where = vehicleId ? { vehicleId } : {};
       const maintenances = await prisma.maintenance.findMany({ where, orderBy: { id: 'asc' } });
       res.json({ maintenances });
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error listing maintenances:', error);
       res.status(500).json({ error: 'Error interno del servidor' });
     }
@@ -33,22 +53,17 @@ export class MaintenanceController {
 
   static async create(req: Request, res: Response) {
     try {
-      const { descripcion, categoria, intervaloKm, costoEstimado, vehicleId } = req.body;
-      if (!descripcion || !intervaloKm || !costoEstimado) {
-        return res.status(400).json({ error: 'descripcion, intervaloKm y costoEstimado son requeridos' });
+      const { error, value } = createSchema.validate(req.body);
+      if (error) return res.status(400).json({ error: error.details[0].message });
+
+      if (value.vehicleId) {
+        const vehicle = await prisma.vehicle.findUnique({ where: { id: value.vehicleId } });
+        if (!vehicle) return res.status(404).json({ error: 'Vehículo no encontrado' });
       }
-      const cat = categoria && CATEGORIAS.includes(categoria) ? categoria : 'OTROS';
-      const maintenance = await prisma.maintenance.create({
-        data: {
-          descripcion,
-          categoria: cat,
-          intervaloKm: Number(intervaloKm),
-          costoEstimado: Number(costoEstimado),
-          vehicleId: vehicleId ? Number(vehicleId) : null,
-        },
-      });
+
+      const maintenance = await prisma.maintenance.create({ data: value });
       res.status(201).json({ maintenance });
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error creating maintenance:', error);
       res.status(500).json({ error: 'Error interno del servidor' });
     }
@@ -56,16 +71,16 @@ export class MaintenanceController {
 
   static async update(req: Request, res: Response) {
     try {
-      const { id } = req.params;
-      const { descripcion, categoria, intervaloKm, costoEstimado } = req.body;
-      const data: any = {};
-      if (descripcion) data.descripcion = descripcion;
-      if (categoria && CATEGORIAS.includes(categoria)) data.categoria = categoria;
-      if (intervaloKm) data.intervaloKm = Number(intervaloKm);
-      if (costoEstimado) data.costoEstimado = Number(costoEstimado);
-      const maintenance = await prisma.maintenance.update({ where: { id: Number(id) }, data });
+      const id = Number(req.params.id);
+      const { error, value } = updateSchema.validate(req.body);
+      if (error) return res.status(400).json({ error: error.details[0].message });
+
+      const exists = await prisma.maintenance.findUnique({ where: { id } });
+      if (!exists) return res.status(404).json({ error: 'Mantenimiento no encontrado' });
+
+      const maintenance = await prisma.maintenance.update({ where: { id }, data: value });
       res.json({ maintenance });
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error updating maintenance:', error);
       res.status(500).json({ error: 'Error interno del servidor' });
     }
@@ -73,10 +88,13 @@ export class MaintenanceController {
 
   static async remove(req: Request, res: Response) {
     try {
-      const { id } = req.params;
-      await prisma.maintenance.delete({ where: { id: Number(id) } });
+      const id = Number(req.params.id);
+      const exists = await prisma.maintenance.findUnique({ where: { id } });
+      if (!exists) return res.status(404).json({ error: 'Mantenimiento no encontrado' });
+
+      await prisma.maintenance.delete({ where: { id } });
       res.json({ success: true });
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error deleting maintenance:', error);
       res.status(500).json({ error: 'Error interno del servidor' });
     }
@@ -84,19 +102,19 @@ export class MaintenanceController {
 
   static async seedPlan(req: Request, res: Response) {
     try {
-      const { vehicleId } = req.body;
-      if (!vehicleId) return res.status(400).json({ error: 'vehicleId es requerido' });
-      const vehicle = await prisma.vehicle.findUnique({ where: { id: Number(vehicleId) } });
+      const { error, value } = seedSchema.validate(req.body);
+      if (error) return res.status(400).json({ error: error.details[0].message });
+
+      const vehicle = await prisma.vehicle.findUnique({ where: { id: value.vehicleId } });
       if (!vehicle) return res.status(404).json({ error: 'Vehículo no encontrado' });
+
       const created = await Promise.all(
         PLAN_KIA_RIO_XCITE.map(p =>
-          prisma.maintenance.create({
-            data: { ...p, vehicleId: Number(vehicleId) },
-          })
+          prisma.maintenance.create({ data: { ...p, vehicleId: value.vehicleId } })
         )
       );
       res.status(201).json({ maintenances: created });
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error seeding maintenance plan:', error);
       res.status(500).json({ error: 'Error interno del servidor' });
     }
@@ -104,22 +122,23 @@ export class MaintenanceController {
 
   static async alerts(req: Request, res: Response) {
     try {
-      const { vehicleId } = req.query;
+      const vehicleId = Number(req.query.vehicleId);
       if (!vehicleId) return res.status(400).json({ error: 'vehicleId es requerido' });
-      const vehicle = await prisma.vehicle.findUnique({ where: { id: Number(vehicleId) } });
+
+      const vehicle = await prisma.vehicle.findUnique({ where: { id: vehicleId } });
       if (!vehicle) return res.status(404).json({ error: 'Vehículo no encontrado' });
+
       const maintenances = await prisma.maintenance.findMany({
-        where: { vehicleId: Number(vehicleId) },
+        where: { vehicleId },
         orderBy: { intervaloKm: 'asc' },
       });
+
       const alerts = maintenances
-        .map(m => {
-          const remaining = m.intervaloKm - vehicle.kilometrajeActual;
-          return { ...m, remainingKm: remaining };
-        })
+        .map(m => ({ ...m, remainingKm: m.intervaloKm - vehicle.kilometrajeActual }))
         .filter(m => m.remainingKm <= 1000);
+
       res.json({ alerts });
-    } catch (error: any) {
+    } catch (error) {
       console.error('Error getting maintenance alerts:', error);
       res.status(500).json({ error: 'Error interno del servidor' });
     }

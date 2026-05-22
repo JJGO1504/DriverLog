@@ -1,5 +1,4 @@
 export type CategoriaMantenimiento = 'MOTOR' | 'FRENOS' | 'SUSPENSION' | 'LLANTAS' | 'OTROS';
-
 export type Role = 'USER' | 'SUPERUSER';
 
 export interface User {
@@ -21,6 +20,17 @@ export interface Vehicle {
   valorReventaEstimado: number;
   vidaUtilKm: number;
   rendimientoKmGalon: number;
+}
+
+export interface FuelEntry {
+  id: number;
+  fecha: string;
+  cantidad: number;
+  kilometraje: number;
+  costoTotal: number;
+  userId: number;
+  vehicleId: number | null;
+  vehicle?: Vehicle;
 }
 
 export interface Maintenance {
@@ -45,4 +55,17 @@ export interface Trip {
   userId: number;
   vehicleId: number;
   vehicle?: Vehicle;
+}
+
+export interface VehicleDocument {
+  id: number;
+  tipo: 'SOAT' | 'TECNOMECANICA' | 'SEGURO' | 'OTRO';
+  fechaExpedicion: string;
+  fechaVencimiento: string;
+  vehicleId: number;
+}
+
+export interface FinancialGoal {
+  periodo: 'diario' | 'semanal' | 'mensual';
+  montoObjetivo: number;
 }

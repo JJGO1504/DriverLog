@@ -12,4 +12,6 @@ router.put('/trips/:id', TripController.updateTrip);
 // Route to get monthly profit for a user
 router.get('/trips/profit/:userId/:month/:year', TripController.getMonthlyProfit);
 
+router.get('/users/:userId/trips/export', TripController.exportCSV);
+
 export default router;

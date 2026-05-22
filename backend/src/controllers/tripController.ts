@@ -112,4 +112,40 @@ export class TripController {
       res.status(500).json({ error: 'Error interno del servidor' });
     }
   }
+
+  static async exportCSV(req: Request, res: Response) {
+    try {
+      const userId = parseInt(req.params.userId, 10);
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+      const trips = await prisma.trip.findMany({
+        where: { userId },
+        include: { vehicle: true },
+        orderBy: { fecha: 'desc' },
+      });
+
+      const sep = ';';
+      const header = `Fecha${sep}Ingreso Bruto${sep}Km Recorridos${sep}Gasto Combustible${sep}Ganancia Neta${sep}Vehiculo`;
+      const rows = trips.map(t => {
+        const net = t.ingresoBruto - t.gastoCombustible;
+        return `${t.fecha.toISOString().slice(0, 10)}${sep}${t.ingresoBruto.toFixed(0)}${sep}${t.kmRecorridos.toFixed(1)}${sep}${t.gastoCombustible.toFixed(0)}${sep}${net.toFixed(0)}${sep}${t.vehicle ? `${t.vehicle.marca} ${t.vehicle.modelo}` : t.vehicleId}`;
+      });
+
+      const totalGross = trips.reduce((s, t) => s + t.ingresoBruto, 0);
+      const totalKm = trips.reduce((s, t) => s + t.kmRecorridos, 0);
+      const totalFuel = trips.reduce((s, t) => s + t.gastoCombustible, 0);
+      const totalNet = totalGross - totalFuel;
+      const totalRow = `TOTALES${sep}${totalGross.toFixed(0)}${sep}${totalKm.toFixed(1)}${sep}${totalFuel.toFixed(0)}${sep}${totalNet.toFixed(0)}${sep}"${trips.length} viajes"`;
+
+      const csv = `sep=${sep}\n${header}\n${rows.join('\n')}\n\n${totalRow}`;
+
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename=viajes_${userId}.csv`);
+      res.send(csv);
+    } catch (error: any) {
+      console.error('Error exporting CSV:', error);
+      res.status(500).json({ error: 'Error interno del servidor' });
+    }
+  }
 }
