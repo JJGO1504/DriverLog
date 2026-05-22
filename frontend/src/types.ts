@@ -1,3 +1,5 @@
+export type CategoriaMantenimiento = 'MOTOR' | 'FRENOS' | 'SUSPENSION' | 'LLANTAS' | 'OTROS';
+
 export type Role = 'USER' | 'SUPERUSER';
 
 export interface User {
@@ -18,6 +20,20 @@ export interface Vehicle {
   valorAlquiler: number;
   valorReventaEstimado: number;
   vidaUtilKm: number;
+  rendimientoKmGalon: number;
+}
+
+export interface Maintenance {
+  id: number;
+  descripcion: string;
+  categoria: CategoriaMantenimiento;
+  intervaloKm: number;
+  costoEstimado: number;
+  vehicleId: number | null;
+}
+
+export interface MaintenanceAlert extends Maintenance {
+  remainingKm: number;
 }
 
 export interface Trip {

@@ -9,6 +9,7 @@ import userRoutes from './routes/userRoutes';
 import vehicleRoutes from './routes/vehicleRoutes';
 import adminRoutes from './routes/adminRoutes';
 import authRoutes from './routes/authRoutes';
+import maintenanceRoutes from './routes/maintenanceRoutes';
 
 const prisma = new PrismaClient();
 const app = express();
@@ -51,6 +52,7 @@ app.use('/api', userRoutes);
 app.use('/api', vehicleRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api', authRoutes);
+app.use('/api', maintenanceRoutes);
 
 // Health check
 app.get('/health', (req, res) => {

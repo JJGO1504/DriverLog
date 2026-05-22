@@ -58,6 +58,29 @@ export class TripController {
     }
   }
 
+  static async updateTrip(req: Request, res: Response) {
+    try {
+      const tripId = parseInt(req.params.id, 10);
+      const { ingresoBruto, kmRecorridos, gastoCombustible } = req.body;
+      if (ingresoBruto === undefined || kmRecorridos === undefined) {
+        return res.status(400).json({ error: 'ingresoBruto y kmRecorridos son requeridos' });
+      }
+      const trip = await prisma.trip.update({
+        where: { id: tripId },
+        data: {
+          ingresoBruto: Number(ingresoBruto),
+          kmRecorridos: Number(kmRecorridos),
+          gastoCombustible: gastoCombustible !== undefined ? Number(gastoCombustible) : undefined,
+        },
+        include: { vehicle: true },
+      });
+      res.json({ trip });
+    } catch (error: any) {
+      console.error('Error updating trip:', error);
+      res.status(500).json({ error: 'Error interno del servidor' });
+    }
+  }
+
   // Get monthly profit for a user
   static async getMonthlyProfit(req: Request, res: Response) {
     try {

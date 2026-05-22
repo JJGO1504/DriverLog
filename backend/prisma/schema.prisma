@@ -23,19 +23,21 @@ model User {
 }
 
 model Vehicle {
-  id                   Int    @id @default(autoincrement())
+  id                   Int           @id @default(autoincrement())
   marca                String
   modelo               String
   anio                 Int
-  placa                String @default("")
+  placa                String        @default("")
   kilometrajeActual    Float
   valorCompra          Float
-  valorAlquiler        Float  @default(0)
+  valorAlquiler        Float         @default(0)
   valorReventaEstimado Float
   vidaUtilKm           Float
+  rendimientoKmGalon   Float         @default(1)
   trips                Trip[]
+  maintenances         Maintenance[]
   ownerId              Int?
-  owner                User?  @relation("UserVehicles", fields: [ownerId], references: [id])
+  owner                User?         @relation("UserVehicles", fields: [ownerId], references: [id])
 
   @@index([ownerId])
   @@map("vehicles")
@@ -59,10 +61,14 @@ model Trip {
 }
 
 model Maintenance {
-  id            Int    @id @default(autoincrement())
+  id            Int      @id @default(autoincrement())
   descripcion   String
+  categoria     String   @default("OTROS")
   intervaloKm   Float
   costoEstimado Float
+  vehicleId     Int?
+  vehicle       Vehicle? @relation(fields: [vehicleId], references: [id])
 
+  @@index([vehicleId])
   @@map("maintenances")
 }

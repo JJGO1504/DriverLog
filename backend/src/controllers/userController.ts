@@ -114,7 +114,7 @@ export class UserController {
   static async updateVehicle(req: Request, res: Response) {
     try {
       const vehicleId = parseInt(req.params.id, 10);
-      const { placa, kilometrajeActual, valorCompra, valorAlquiler, vidaUtilKm } = req.body;
+      const { placa, kilometrajeActual, valorCompra, valorAlquiler, vidaUtilKm, rendimientoKmGalon } = req.body;
 
       const vehicle = await prisma.vehicle.update({
         where: { id: vehicleId },
@@ -124,6 +124,7 @@ export class UserController {
           ...(valorCompra !== undefined && { valorCompra: Number(valorCompra) }),
           ...(valorAlquiler !== undefined && { valorAlquiler: Number(valorAlquiler) }),
           ...(vidaUtilKm !== undefined && { vidaUtilKm: Number(vidaUtilKm) }),
+          ...(rendimientoKmGalon !== undefined && { rendimientoKmGalon: Number(rendimientoKmGalon) }),
         },
       });
 
@@ -156,6 +157,7 @@ export class UserController {
           valorCompra: 0,
           valorReventaEstimado: 0,
           vidaUtilKm: 1,
+          rendimientoKmGalon: 1,
           owner: {
             connect: { id: userId },
           },

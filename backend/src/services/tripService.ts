@@ -46,10 +46,11 @@ export class TripService {
       })
       .map(maintenance => {
         const remainingKm = maintenance.intervaloKm - vehicle.kilometrajeActual;
+        const cat = maintenance.categoria ? `[${maintenance.categoria}]` : '';
         if (remainingKm <= 0) {
-          return `Mantenimiento: ${maintenance.descripcion} - Vencido por ${Math.abs(remainingKm).toFixed(2)} km`;
+          return `Mantenimiento ${cat}: ${maintenance.descripcion} - Vencido por ${Math.abs(remainingKm).toFixed(2)} km`;
         }
-        return `Mantenimiento: ${maintenance.descripcion} - ${remainingKm.toFixed(2)} km restantes`;
+        return `Mantenimiento ${cat}: ${maintenance.descripcion} - ${remainingKm.toFixed(2)} km restantes`;
       });
   }
 

@@ -15,19 +15,23 @@ import {
   DollarSign,
   Gauge,
   Flame,
+  Edit3,
+  X,
+  Wrench,
 } from 'lucide-react';
 import { useAuth } from '../hooks/useAuth';
-import type { User, Vehicle, Trip } from '../types';
+import type { User, Vehicle, Trip, Maintenance, MaintenanceAlert, CategoriaMantenimiento } from '../types';
 
 const API = 'http://localhost:3000/api';
 
-type NavItem = 'dashboard' | 'register' | 'fuel' | 'vehicles' | 'analytics' | 'profile';
+type NavItem = 'dashboard' | 'register' | 'fuel' | 'vehicles' | 'maintenance' | 'analytics' | 'profile';
 
 const navItems: { id: NavItem; label: string; icon: React.ElementType }[] = [
   { id: 'dashboard', label: 'Panel de Control', icon: LayoutDashboard },
   { id: 'register', label: 'Registrar Viaje', icon: CalendarPlus },
   { id: 'fuel', label: 'Control de Gasolina', icon: Fuel },
   { id: 'vehicles', label: 'Mis Vehículos', icon: Car },
+  { id: 'maintenance', label: 'Mantenimiento', icon: Wrench },
   { id: 'analytics', label: 'Estadísticas', icon: BarChart3 },
 ];
 
@@ -42,10 +46,19 @@ interface FuelEntry {
   kilometraje: string;
 }
 
-const meses = [
-  'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
-  'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre',
-];
+const PRECIO_GALON = 15500;
+
+const formatCOP = (value: number) =>
+  Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(value);
+
+const toDigits = (v: string) => v.replace(/\D/g, '');
+const formatMiles = (v: string) => {
+  const d = toDigits(v);
+  return d ? d.replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '';
+};
+
+const todayStr = () => new Date().toISOString().slice(0, 10);
+const daysAgoStr = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
 
 export default function DriverDashboard() {
   const { currentUser, logout } = useAuth();
@@ -69,7 +82,7 @@ export default function DriverDashboard() {
   const [vehicleForm, setVehicleForm] = useState({ marca: '', modelo: '', anio: '', placa: '' });
   const [showVehicleForm, setShowVehicleForm] = useState(false);
   const [vehicleSubmitting, setVehicleSubmitting] = useState(false);
-  const [vehicleDetail, setVehicleDetail] = useState({ placa: '', kilometrajeActual: 0, valorCompra: 0, valorAlquiler: 0, vidaUtilKm: 1 });
+  const [vehicleDetail, setVehicleDetail] = useState({ placa: '', kilometrajeActual: '', valorCompra: '', valorAlquiler: '', vidaUtilKm: '', rendimientoKmGalon: '' });
   const [vehicleSaving, setVehicleSaving] = useState(false);
   const [vehicleSaved, setVehicleSaved] = useState(false);
 
@@ -80,9 +93,16 @@ export default function DriverDashboard() {
   const [fuelEntries, setFuelEntries] = useState<FuelEntry[]>([]);
   const [fuelForm, setFuelForm] = useState({ fecha: new Date().toISOString().slice(0, 10), cantidad: '', kilometraje: '' });
 
-  const [monthlyStats, setMonthlyStats] = useState<{ gross: number; fuel: number; km: number; count: number } | null>(null);
-  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
-  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [editingTrip, setEditingTrip] = useState<TripWithVehicle | null>(null);
+  const [editForm, setEditForm] = useState({ ingresoBruto: '', kmRecorridos: '' });
+  const [editSaving, setEditSaving] = useState(false);
+  const [statsTab, setStatsTab] = useState<'diario' | 'semanal' | 'mensual'>('diario');
+
+  const [maintenances, setMaintenances] = useState<Maintenance[]>([]);
+  const [alerts, setAlerts] = useState<MaintenanceAlert[]>([]);
+  const [maintForm, setMaintForm] = useState({ descripcion: '', categoria: 'OTROS' as CategoriaMantenimiento, intervaloKm: '', costoEstimado: '' });
+  const [maintSubmitting, setMaintSubmitting] = useState(false);
+  const [seedLoading, setSeedLoading] = useState(false);
 
   const api = {
     getUserProfile: (userId: number) =>
@@ -93,13 +113,15 @@ export default function DriverDashboard() {
       fetch(`${API}/users/${userId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).then(r => { if (!r.ok) throw new Error(); return r.json(); }),
     createVehicleForUser: (userId: number, payload: { marca: string; modelo: string; anio: number; placa: string }) =>
       fetch(`${API}/users/${userId}/vehicles`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).then(r => { if (!r.ok) throw new Error(); return r.json(); }),
-    updateVehicle: (vehicleId: number, payload: { placa?: string; kilometrajeActual?: number; valorCompra?: number; valorAlquiler?: number; vidaUtilKm?: number }) =>
+    updateVehicle: (vehicleId: number, payload: { placa?: string; kilometrajeActual?: number; valorCompra?: number; valorAlquiler?: number; vidaUtilKm?: number; rendimientoKmGalon?: number }) =>
       fetch(`${API}/vehicles/${vehicleId}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).then(r => { if (!r.ok) throw new Error(); return r.json(); }),
     submitTrip: (payload: { fecha: string; ingresoBruto: number; kmRecorridos: number; gastoCombustible: number; userId: number; vehicleId: number }) =>
       fetch(`${API}/trips`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).then(r => { if (!r.ok) throw new Error(); return r.json(); }),
-    getUserMonthlyStats: (userId: number, month: number, year: number) =>
-      fetch(`${API}/users/${userId}/stats?month=${month}&year=${year}`).then(r => { if (!r.ok) throw new Error(); return r.json(); }),
+    updateTrip: (tripId: number, payload: { ingresoBruto: number; kmRecorridos: number; gastoCombustible?: number }) =>
+      fetch(`${API}/trips/${tripId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).then(r => { if (!r.ok) throw new Error(); return r.json(); }),
   };
+
+  const defaultVehicleId = (vehiculo?.id ?? 1);
 
   useEffect(() => {
     if (!currentUser) {
@@ -129,32 +151,42 @@ export default function DriverDashboard() {
     }
   };
 
-  const loadMonthlyStats = async () => {
-    if (!currentUser) return;
-    try {
-      const data = await api.getUserMonthlyStats(currentUser.id, selectedMonth, selectedYear);
-      setMonthlyStats(data);
-    } catch {
-      setMonthlyStats(null);
-    }
+  const handleOpenEdit = (trip: TripWithVehicle) => {
+    setEditingTrip(trip);
+    setEditForm({ ingresoBruto: String(trip.ingresoBruto), kmRecorridos: String(trip.kmRecorridos) });
   };
 
-  useEffect(() => {
-    if (activeNav === 'analytics' && currentUser) {
-      loadMonthlyStats();
+  const handleSaveEdit = async () => {
+    if (!editingTrip || !currentUser) return;
+    const rend = vehiculo?.rendimientoKmGalon || 1;
+    const km = Number(editForm.kmRecorridos) || 0;
+    const autoFuel = (km / rend) * PRECIO_GALON;
+    setEditSaving(true);
+    try {
+      await api.updateTrip(editingTrip.id, {
+        ingresoBruto: Number(editForm.ingresoBruto) || 0,
+        kmRecorridos: km,
+        gastoCombustible: autoFuel,
+      });
+      setEditingTrip(null);
+      await loadData();
+    } catch {
+      alert('Error actualizando viaje');
+    } finally {
+      setEditSaving(false);
     }
-  }, [activeNav, selectedMonth, selectedYear, currentUser]);
-
-  const defaultVehicleId = vehiculo?.id ?? 1;
+  };
 
   const handleRegisterTrip = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser) return;
+    const rend = vehiculo?.rendimientoKmGalon || 1;
+    const autoFuel = (Number(form.kmRecorridos) / rend) * PRECIO_GALON;
     const payload = {
       fecha: form.fecha,
-      ingresoBruto: Number(form.ingresoBruto),
-      kmRecorridos: Number(form.kmRecorridos),
-      gastoCombustible: Number(form.gastoCombustible),
+      ingresoBruto: Number(form.ingresoBruto.replace(/\./g, '')) || 0,
+      kmRecorridos: Number(form.kmRecorridos) || 0,
+      gastoCombustible: autoFuel,
       userId: currentUser.id,
       vehicleId: defaultVehicleId,
     };
@@ -175,10 +207,11 @@ export default function DriverDashboard() {
     if (vehiculo) {
       setVehicleDetail({
         placa: vehiculo.placa || '',
-        kilometrajeActual: vehiculo.kilometrajeActual,
-        valorCompra: vehiculo.valorCompra,
-        valorAlquiler: vehiculo.valorAlquiler,
-        vidaUtilKm: vehiculo.vidaUtilKm,
+        kilometrajeActual: formatMiles(String(vehiculo.kilometrajeActual)),
+        valorCompra: formatMiles(String(vehiculo.valorCompra)),
+        valorAlquiler: formatMiles(String(vehiculo.valorAlquiler)),
+        vidaUtilKm: formatMiles(String(vehiculo.vidaUtilKm)),
+        rendimientoKmGalon: String(vehiculo.rendimientoKmGalon),
       });
     }
   }, [vehiculo]);
@@ -187,7 +220,15 @@ export default function DriverDashboard() {
     if (!vehiculo) return;
     setVehicleSaving(true);
     try {
-      const payload = { ...vehicleDetail, placa: vehicleDetail.placa.trim().toUpperCase() };
+      const s = (v: string) => v.replace(/\./g, '');
+      const payload = {
+        placa: vehicleDetail.placa.trim().toUpperCase(),
+        kilometrajeActual: Number(s(vehicleDetail.kilometrajeActual)) || 0,
+        valorCompra: Number(s(vehicleDetail.valorCompra)) || 0,
+        valorAlquiler: Number(s(vehicleDetail.valorAlquiler)) || 0,
+        vidaUtilKm: Number(s(vehicleDetail.vidaUtilKm)) || 1,
+        rendimientoKmGalon: Number(vehicleDetail.rendimientoKmGalon) || 1,
+      };
       const { vehicle } = await api.updateVehicle(vehiculo.id, payload);
       setVehiculo(vehicle);
       setVehicleSaved(true);
@@ -251,6 +292,78 @@ export default function DriverDashboard() {
       ...prev,
     ]);
     setFuelForm({ fecha: new Date().toISOString().slice(0, 10), cantidad: '', kilometraje: '' });
+  };
+
+  const loadMaintenances = async () => {
+    if (!vehiculo) return;
+    try {
+      const [mData, aData] = await Promise.all([
+        fetch(`${API}/maintenances?vehicleId=${vehiculo.id}`).then(r => r.json()),
+        fetch(`${API}/maintenances/alerts?vehicleId=${vehiculo.id}`).then(r => r.json()),
+      ]);
+      setMaintenances(mData.maintenances ?? []);
+      setAlerts(aData.alerts ?? []);
+    } catch {
+      setMaintenances([]);
+      setAlerts([]);
+    }
+  };
+
+  useEffect(() => {
+    if (activeNav === 'maintenance' && vehiculo) {
+      loadMaintenances();
+    }
+  }, [activeNav, vehiculo]);
+
+  const handleCreateMaintenance = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!vehiculo || !maintForm.descripcion.trim() || !maintForm.intervaloKm || !maintForm.costoEstimado) return;
+    setMaintSubmitting(true);
+    try {
+      await fetch(`${API}/maintenances`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          descripcion: maintForm.descripcion.trim(),
+          categoria: maintForm.categoria,
+          intervaloKm: Number(maintForm.intervaloKm),
+          costoEstimado: Number(maintForm.costoEstimado),
+          vehicleId: vehiculo.id,
+        }),
+      });
+      setMaintForm({ descripcion: '', categoria: 'OTROS', intervaloKm: '', costoEstimado: '' });
+      await loadMaintenances();
+    } catch {
+      alert('Error registrando mantenimiento');
+    } finally {
+      setMaintSubmitting(false);
+    }
+  };
+
+  const handleDeleteMaintenance = async (id: number) => {
+    try {
+      await fetch(`${API}/maintenances/${id}`, { method: 'DELETE' });
+      await loadMaintenances();
+    } catch {
+      alert('Error eliminando mantenimiento');
+    }
+  };
+
+  const handleSeedPlan = async () => {
+    if (!vehiculo) return;
+    setSeedLoading(true);
+    try {
+      await fetch(`${API}/maintenances/seed`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vehicleId: vehiculo.id }),
+      });
+      await loadMaintenances();
+    } catch {
+      alert('Error cargando plan preventivo');
+    } finally {
+      setSeedLoading(false);
+    }
   };
 
   const handleLogout = () => {
@@ -346,8 +459,8 @@ export default function DriverDashboard() {
                   </div>
                   <div>
                     <label className="mb-1 block text-xs text-gray-400">Ingreso Bruto</label>
-                    <input type="number" step="0.01" min="0" value={form.ingresoBruto}
-                      onChange={(e) => setForm({ ...form, ingresoBruto: e.target.value })} required placeholder="$ 0.00"
+                    <input type="text" inputMode="numeric" value={form.ingresoBruto}
+                      onChange={(e) => setForm({ ...form, ingresoBruto: formatMiles(e.target.value) })} required placeholder="$ 0"
                       className="input-premium w-full" />
                   </div>
                   <div>
@@ -358,9 +471,9 @@ export default function DriverDashboard() {
                   </div>
                   <div>
                     <label className="mb-1 block text-xs text-gray-400">Gasto de Combustible</label>
-                    <input type="number" step="0.01" min="0" value={form.gastoCombustible}
-                      onChange={(e) => setForm({ ...form, gastoCombustible: e.target.value })} required placeholder="$ 0.00"
-                      className="input-premium w-full" />
+                    <input type="text" value={formatCOP(vehiculo ? (Number(form.kmRecorridos) / (vehiculo.rendimientoKmGalon || 1)) * PRECIO_GALON : 0)}
+                      readOnly
+                      className="w-full rounded-xl border border-gray-700 bg-black/30 px-4 py-3 text-gray-400 outline-none cursor-not-allowed" />
                   </div>
                 </div>
                 <button type="submit" disabled={submitting}
@@ -385,6 +498,7 @@ export default function DriverDashboard() {
                         <th className="pb-3 text-right">Gasto Combustible</th>
                         <th className="pb-3 text-right">Ganancia Neta</th>
                         <th className="pb-3 text-left">Vehículo</th>
+                        <th className="pb-3 text-center">Acción</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -393,10 +507,16 @@ export default function DriverDashboard() {
                         return (
                           <tr key={trip.id} className="border-b border-gray-800/50 last:border-0">
                             <td className="py-3 text-gray-300">{new Date(trip.fecha).toLocaleDateString('es-ES')}</td>
-                            <td className="py-3 text-right text-gray-300">${trip.ingresoBruto.toFixed(2)}</td>
-                            <td className="py-3 text-right text-gray-300">${trip.gastoCombustible.toFixed(2)}</td>
-                            <td className={`py-3 text-right font-medium ${net >= 0 ? 'text-green-400' : 'text-red-400'}`}>${net.toFixed(2)}</td>
+                            <td className="py-3 text-right text-gray-300">{formatCOP(trip.ingresoBruto)}</td>
+                            <td className="py-3 text-right text-gray-300">{formatCOP(trip.gastoCombustible)}</td>
+                            <td className={`py-3 text-right font-medium ${net >= 0 ? 'text-green-400' : 'text-red-400'}`}>{formatCOP(net)}</td>
                             <td className="py-3 text-gray-300">{trip.vehicle ? `${trip.vehicle.marca} ${trip.vehicle.modelo}` : `ID: ${trip.vehicleId}`}</td>
+                            <td className="py-3 text-center">
+                              <button onClick={() => handleOpenEdit(trip)}
+                                className="text-cyan-400 hover:text-cyan-300 transition p-1">
+                                <Edit3 size={15} />
+                              </button>
+                            </td>
                           </tr>
                         );
                       })}
@@ -437,15 +557,15 @@ export default function DriverDashboard() {
                   <div className="space-y-3">
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-400">Total Ingresos</span>
-                      <span className="text-white font-medium">${totalEarnings.toFixed(2)}</span>
+                      <span className="text-white font-medium">{formatCOP(totalEarnings)}</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-400">Total Combustible</span>
-                      <span className="text-red-400 font-medium">-${totalFuel.toFixed(2)}</span>
+                      <span className="text-red-400 font-medium">-{formatCOP(totalFuel)}</span>
                     </div>
                     <div className="border-t border-gray-800 pt-2 flex justify-between text-sm">
                       <span className="text-gray-300">Ganancia Neta</span>
-                      <span className={`font-bold ${totalNet >= 0 ? 'text-green-400' : 'text-red-400'}`}>${totalNet.toFixed(2)}</span>
+                      <span className={`font-bold ${totalNet >= 0 ? 'text-green-400' : 'text-red-400'}`}>{formatCOP(totalNet)}</span>
                     </div>
                   </div>
                 </div>
@@ -467,9 +587,9 @@ export default function DriverDashboard() {
                     className="input-premium w-full" />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs text-gray-400">Ingreso Bruto ($)</label>
-                  <input type="number" step="0.01" min="0" value={form.ingresoBruto}
-                    onChange={(e) => setForm({ ...form, ingresoBruto: e.target.value })} required placeholder="0.00"
+                  <label className="mb-1 block text-xs text-gray-400">Ingreso Bruto</label>
+                  <input type="text" inputMode="numeric" value={form.ingresoBruto}
+                    onChange={(e) => setForm({ ...form, ingresoBruto: formatMiles(e.target.value) })} required placeholder="0"
                     className="input-premium w-full" />
                 </div>
                 <div>
@@ -479,10 +599,10 @@ export default function DriverDashboard() {
                     className="input-premium w-full" />
                 </div>
                 <div>
-                  <label className="mb-1 block text-xs text-gray-400">Gasto de Combustible ($)</label>
-                  <input type="number" step="0.01" min="0" value={form.gastoCombustible}
-                    onChange={(e) => setForm({ ...form, gastoCombustible: e.target.value })} required placeholder="0.00"
-                    className="input-premium w-full" />
+                  <label className="mb-1 block text-xs text-gray-400">Gasto de Combustible</label>
+                  <input type="text" value={formatCOP(vehiculo ? (Number(form.kmRecorridos) / (vehiculo.rendimientoKmGalon || 1)) * PRECIO_GALON : 0)}
+                    readOnly
+                    className="w-full rounded-xl border border-gray-700 bg-black/30 px-4 py-3 text-gray-400 outline-none cursor-not-allowed" />
                 </div>
                 <button type="submit" disabled={submitting}
                   className="btn-premium w-full">
@@ -583,30 +703,38 @@ export default function DriverDashboard() {
                       </div>
                       <div>
                         <label className="mb-1 block text-xs text-gray-400">Kilometraje Actual</label>
-                        <input type="number" min="0" step="0.1"
+                        <input type="text" inputMode="numeric"
                           value={vehicleDetail.kilometrajeActual}
-                          onChange={(e) => setVehicleDetail({ ...vehicleDetail, kilometrajeActual: Number(e.target.value) })}
+                          onChange={(e) => setVehicleDetail({ ...vehicleDetail, kilometrajeActual: formatMiles(e.target.value) })}
                           className="input-premium w-full" />
                       </div>
                       <div>
                         <label className="mb-1 block text-xs text-gray-400">Valor de Compra (COP)</label>
-                        <input type="number" min="0" step="1000"
+                        <input type="text" inputMode="numeric"
                           value={vehicleDetail.valorCompra}
-                          onChange={(e) => setVehicleDetail({ ...vehicleDetail, valorCompra: Number(e.target.value) })}
+                          onChange={(e) => setVehicleDetail({ ...vehicleDetail, valorCompra: formatMiles(e.target.value) })}
                           className="input-premium w-full" />
                       </div>
                       <div>
                         <label className="mb-1 block text-xs text-gray-400">Valor de la Renta / Alquiler (COP)</label>
-                        <input type="number" min="0" step="1000"
+                        <input type="text" inputMode="numeric"
                           value={vehicleDetail.valorAlquiler}
-                          onChange={(e) => setVehicleDetail({ ...vehicleDetail, valorAlquiler: Number(e.target.value) })}
+                          onChange={(e) => setVehicleDetail({ ...vehicleDetail, valorAlquiler: formatMiles(e.target.value) })}
                           className="input-premium w-full" />
                       </div>
                       <div>
-                        <label className="mb-1 block text-xs text-gray-400">Vida Útil en Kilómetros</label>
-                        <input type="number" min="1" step="1000"
+                        <label className="mb-1 block text-xs text-gray-400">Vida Útil en Kilómetros <span className="text-gray-500 font-normal">(Kilometraje total hasta el que planeas conservar o explotar el carro antes de cambiarlo)</span></label>
+                        <input type="text" inputMode="numeric"
                           value={vehicleDetail.vidaUtilKm}
-                          onChange={(e) => setVehicleDetail({ ...vehicleDetail, vidaUtilKm: Number(e.target.value) })}
+                          onChange={(e) => setVehicleDetail({ ...vehicleDetail, vidaUtilKm: formatMiles(e.target.value) })}
+                          className="input-premium w-full" />
+                      </div>
+                      <div>
+                        <label className="mb-1 block text-xs text-gray-400">Rendimiento (Km por Galón)</label>
+                        <input type="number" min="1" step="0.1"
+                          value={vehicleDetail.rendimientoKmGalon}
+                          onChange={(e) => setVehicleDetail({ ...vehicleDetail, rendimientoKmGalon: e.target.value })}
+                          placeholder="Ej: 35"
                           className="input-premium w-full" />
                       </div>
 
@@ -655,81 +783,225 @@ export default function DriverDashboard() {
           </motion.div>
         );
 
-      case 'analytics':
+      case 'maintenance':
         return (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl mx-auto space-y-6">
             <div className="card p-6">
               <div className="flex items-center justify-between mb-4">
-                <h2 className="heading-lg">Estadísticas Mensuales</h2>
-                <div className="flex gap-2">
-                  <select value={selectedMonth} onChange={(e) => setSelectedMonth(Number(e.target.value))}
-                    className="input-premium text-xs py-1.5 px-3">
-                    {meses.map((m, i) => <option key={i} value={i + 1}>{m}</option>)}
-                  </select>
-                  <select value={selectedYear} onChange={(e) => setSelectedYear(Number(e.target.value))}
-                    className="input-premium text-xs py-1.5 px-3">
-                    {[2024, 2025, 2026, 2027].map((y) => <option key={y} value={y}>{y}</option>)}
-                  </select>
+                <h2 className="heading-lg">Plan Preventivo</h2>
+                <button onClick={handleSeedPlan} disabled={seedLoading}
+                  className="btn-premium text-xs py-2 px-4">
+                  {seedLoading ? 'Cargando...' : 'Cargar plan estándar'}
+                </button>
+              </div>
+              <p className="text-xs text-gray-500 mb-4">Carga el plan de mantenimiento sugerido para un Kia Rio Xcite.</p>
+
+              {alerts.length > 0 && (
+                <div className="mb-4 space-y-2">
+                  <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider">Alertas preventivas</p>
+                  {alerts.map((a) => {
+                    const overdue = a.remainingKm <= 0;
+                    return (
+                      <div key={a.id}
+                        className="flex items-center gap-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3">
+                        <span className="text-amber-400 text-lg">⚠</span>
+                        <div className="flex-1">
+                          <p className="text-sm font-medium text-amber-300">
+                            [{a.categoria}] {a.descripcion}
+                          </p>
+                          <p className="text-xs text-amber-400/80">
+                            {overdue
+                              ? `¡Vencido por ${Math.abs(a.remainingKm).toLocaleString('es-CO')} km!`
+                              : `¡Próximo mantenimiento en ${a.remainingKm.toLocaleString('es-CO')} km!`}
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <form onSubmit={handleCreateMaintenance} className="space-y-3 rounded-xl border border-gray-700 bg-black/30 p-4">
+                <h3 className="text-sm font-semibold text-white">Agregar Mantenimiento</h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <input value={maintForm.descripcion}
+                      onChange={(e) => setMaintForm({ ...maintForm, descripcion: e.target.value })}
+                      placeholder="Descripción (ej: Cambio de aceite)" required
+                      className="input-premium w-full" />
+                  </div>
+                  <div>
+                    <select value={maintForm.categoria}
+                      onChange={(e) => setMaintForm({ ...maintForm, categoria: e.target.value as CategoriaMantenimiento })}
+                      className="input-premium w-full">
+                      <option value="MOTOR">Motor</option>
+                      <option value="FRENOS">Frenos</option>
+                      <option value="SUSPENSION">Suspensión</option>
+                      <option value="LLANTAS">Llantas</option>
+                      <option value="OTROS">Otros</option>
+                    </select>
+                  </div>
+                  <div>
+                    <input type="number" min="1" value={maintForm.intervaloKm}
+                      onChange={(e) => setMaintForm({ ...maintForm, intervaloKm: e.target.value })}
+                      placeholder="Intervalo (km)" required
+                      className="input-premium w-full" />
+                  </div>
+                  <div>
+                    <input type="text" inputMode="numeric" value={maintForm.costoEstimado}
+                      onChange={(e) => setMaintForm({ ...maintForm, costoEstimado: formatMiles(e.target.value) })}
+                      placeholder="Costo estimado (COP)" required
+                      className="input-premium w-full" />
+                  </div>
+                </div>
+                <button type="submit" disabled={maintSubmitting}
+                  className="btn-premium w-full text-sm py-2">
+                  {maintSubmitting ? 'Guardando...' : 'Agregar Mantenimiento'}
+                </button>
+              </form>
+            </div>
+
+            <div className="card p-6">
+              <h2 className="heading-lg mb-4">Historial de Mantenimientos</h2>
+              {maintenances.length === 0 ? (
+                <p className="text-sm text-gray-500">No hay mantenimientos registrados. Usa el botón "Cargar plan estándar" o agrega manualmente.</p>
+              ) : (
+                <div className="space-y-2">
+                  {maintenances.map((m) => {
+                    const kmDiff = m.intervaloKm - (vehiculo?.kilometrajeActual ?? 0);
+                    const isDue = kmDiff <= 1000;
+                    return (
+                      <div key={m.id}
+                        className={`flex items-center justify-between rounded-lg border px-4 py-3 text-sm ${
+                          isDue
+                            ? 'border-amber-500/30 bg-amber-500/5'
+                            : 'border-gray-800 bg-black/30'
+                        }`}>
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-medium uppercase tracking-wider text-gray-500">[{m.categoria}]</span>
+                            <span className="text-white font-medium">{m.descripcion}</span>
+                          </div>
+                          <div className="flex gap-4 mt-1 text-xs text-gray-500">
+                            <span>Cada {m.intervaloKm.toLocaleString('es-CO')} km</span>
+                            <span>Costo: {formatCOP(m.costoEstimado)}</span>
+                          </div>
+                          {isDue && (
+                            <p className="text-xs text-amber-400 mt-1">
+                              {kmDiff <= 0
+                                ? `⚠ Vencido por ${Math.abs(kmDiff).toLocaleString('es-CO')} km`
+                                : `⚠ Próximo mantenimiento en ${kmDiff.toLocaleString('es-CO')} km`}
+                            </p>
+                          )}
+                        </div>
+                        <button onClick={() => handleDeleteMaintenance(m.id)}
+                          className="text-gray-500 hover:text-red-400 transition p-1 ml-3">
+                          <X size={15} />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        );
+
+      case 'analytics':
+        const filtered = (() => {
+          const now = todayStr();
+          switch (statsTab) {
+            case 'diario': return trips.filter(t => t.fecha.slice(0, 10) === now);
+            case 'semanal': const weekAgo = daysAgoStr(7); return trips.filter(t => t.fecha.slice(0, 10) >= weekAgo);
+            case 'mensual': return trips.filter(t => {
+              const d = t.fecha.slice(0, 7);
+              return d === now.slice(0, 7);
+            });
+          }
+        })();
+        const sGross = filtered.reduce((s, t) => s + t.ingresoBruto, 0);
+        const sFuel = filtered.reduce((s, t) => s + t.gastoCombustible, 0);
+        const sNet = filtered.reduce((s, t) => s + calcNetProfit(t), 0);
+        const sKm = filtered.reduce((s, t) => s + t.kmRecorridos, 0);
+        return (
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl mx-auto space-y-6">
+            <div className="card p-6">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="heading-lg">Estadísticas</h2>
+                <div className="flex gap-1 bg-black/40 rounded-lg p-1 border border-gray-800">
+                  {(['diario', 'semanal', 'mensual'] as const).map((tab) => (
+                    <button key={tab} onClick={() => setStatsTab(tab)}
+                      className={`px-4 py-1.5 text-xs rounded-md font-medium transition ${statsTab === tab ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-400/30' : 'text-gray-500 hover:text-gray-300'}`}>
+                      {tab === 'diario' ? 'Diario' : tab === 'semanal' ? 'Semanal' : 'Mensual'}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              {monthlyStats ? (
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-                  <div className="rounded-xl border border-gray-800 bg-black/30 p-4 text-center">
-                    <div className="flex justify-center mb-1"><DollarSign size={18} className="text-green-400" /></div>
-                    <p className="text-lg font-bold text-green-400">${monthlyStats.gross.toFixed(2)}</p>
-                    <p className="text-[10px] text-gray-500 uppercase tracking-wider">Ingresos</p>
-                  </div>
-                  <div className="rounded-xl border border-gray-800 bg-black/30 p-4 text-center">
-                    <div className="flex justify-center mb-1"><Flame size={18} className="text-red-400" /></div>
-                    <p className="text-lg font-bold text-red-400">${monthlyStats.fuel.toFixed(2)}</p>
-                    <p className="text-[10px] text-gray-500 uppercase tracking-wider">Combustible</p>
-                  </div>
-                  <div className="rounded-xl border border-gray-800 bg-black/30 p-4 text-center">
-                    <div className="flex justify-center mb-1"><Gauge size={18} className="text-cyan-400" /></div>
-                    <p className="text-lg font-bold text-cyan-400">{monthlyStats.km.toFixed(1)} km</p>
-                    <p className="text-[10px] text-gray-500 uppercase tracking-wider">Distancia</p>
-                  </div>
-                  <div className="rounded-xl border border-gray-800 bg-black/30 p-4 text-center">
-                    <div className="flex justify-center mb-1"><BarChart3 size={18} className="text-blue-400" /></div>
-                    <p className="text-lg font-bold text-blue-400">{monthlyStats.count}</p>
-                    <p className="text-[10px] text-gray-500 uppercase tracking-wider">Viajes</p>
-                  </div>
-                </div>
+              {filtered.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-8">No hay viajes en este período.</p>
               ) : (
-                <p className="text-sm text-gray-500 text-center py-8">Selecciona un mes para ver estadísticas.</p>
+                <>
+                  <div className="grid grid-cols-3 gap-4">
+                    <div className="rounded-xl border border-gray-800 bg-black/30 p-4 text-center">
+                      <div className="flex justify-center mb-1"><DollarSign size={18} className="text-green-400" /></div>
+                      <p className="text-lg font-bold text-green-400">{formatCOP(sGross)}</p>
+                      <p className="text-[10px] text-gray-500 uppercase tracking-wider">Ingresos</p>
+                    </div>
+                    <div className="rounded-xl border border-gray-800 bg-black/30 p-4 text-center">
+                      <div className="flex justify-center mb-1"><Flame size={18} className="text-red-400" /></div>
+                      <p className="text-lg font-bold text-red-400">{formatCOP(sFuel)}</p>
+                      <p className="text-[10px] text-gray-500 uppercase tracking-wider">Combustible</p>
+                    </div>
+                    <div className="rounded-xl border border-gray-800 bg-black/30 p-4 text-center">
+                      <div className="flex justify-center mb-1"><BarChart3 size={18} className="text-blue-400" /></div>
+                      <p className={`text-lg font-bold ${sNet >= 0 ? 'text-green-400' : 'text-red-400'}`}>{formatCOP(sNet)}</p>
+                      <p className="text-[10px] text-gray-500 uppercase tracking-wider">Ganancia Neta</p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex gap-4 text-xs text-gray-500">
+                    <span>Viajes: {filtered.length}</span>
+                    <span>Kilómetros: {sKm.toFixed(1)} km</span>
+                  </div>
+                </>
               )}
             </div>
 
-            {monthlyStats && monthlyStats.count > 0 && (
+            {maintenances.length > 0 && (
               <div className="card p-6">
-                <h3 className="mb-4 text-sm font-semibold text-white">Resumen del Mes</h3>
-                <div className="space-y-3">
-                  <div>
-                    <div className="flex justify-between text-xs text-gray-400 mb-1">
-                      <span>Ingreso Bruto</span><span>${monthlyStats.gross.toFixed(2)}</span>
+                <h3 className="mb-4 text-sm font-semibold text-white">Gastos Estimados por Categoría</h3>
+                <div className="space-y-2">
+                  {(['MOTOR', 'FRENOS', 'SUSPENSION', 'LLANTAS', 'OTROS'] as const).map((cat) => {
+                    const total = maintenances.filter(m => m.categoria === cat).reduce((s, m) => s + m.costoEstimado, 0);
+                    if (total === 0) return null;
+                    return (
+                      <div key={cat} className="flex items-center justify-between rounded-lg border border-gray-800 bg-black/30 px-4 py-2 text-sm">
+                        <span className="text-gray-400">
+                          {cat === 'MOTOR' ? 'Motor' : cat === 'FRENOS' ? 'Frenos' : cat === 'SUSPENSION' ? 'Suspensión' : cat === 'LLANTAS' ? 'Llantas' : 'Otros'}
+                        </span>
+                        <span className="text-white font-medium">{formatCOP(total)}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {filtered.length > 0 && (
+              <div className="card p-6">
+                <h3 className="mb-4 text-sm font-semibold text-white">
+                  {statsTab === 'diario' ? 'Viajes de Hoy' : statsTab === 'semanal' ? 'Viajes de la Semana' : 'Viajes del Mes'}
+                </h3>
+                <div className="space-y-2">
+                  {filtered.map(t => (
+                    <div key={t.id} className="flex items-center justify-between rounded-lg border border-gray-800 bg-black/30 px-4 py-2 text-sm">
+                      <span className="text-gray-400">{new Date(t.fecha).toLocaleDateString('es-ES')}</span>
+                      <span className="text-green-400">{formatCOP(t.ingresoBruto)}</span>
+                      <span className="text-red-400">{formatCOP(t.gastoCombustible)}</span>
+                      <span className={calcNetProfit(t) >= 0 ? 'text-cyan-400 font-medium' : 'text-red-400 font-medium'}>{formatCOP(calcNetProfit(t))}</span>
                     </div>
-                    <div className="h-2 rounded-full bg-gray-800 overflow-hidden">
-                      <div className="h-full rounded-full bg-green-500/70 transition-all" style={{ width: `${Math.min(100, (monthlyStats.gross / (monthlyStats.gross + monthlyStats.fuel || 1)) * 100)}%` }} />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-xs text-gray-400 mb-1">
-                      <span>Gasto Combustible</span><span>${monthlyStats.fuel.toFixed(2)}</span>
-                    </div>
-                    <div className="h-2 rounded-full bg-gray-800 overflow-hidden">
-                      <div className="h-full rounded-full bg-red-500/70 transition-all" style={{ width: `${Math.min(100, (monthlyStats.fuel / (monthlyStats.gross + monthlyStats.fuel || 1)) * 100)}%` }} />
-                    </div>
-                  </div>
-                  <div>
-                    <div className="flex justify-between text-xs text-gray-400 mb-1">
-                      <span>Ganancia Neta</span><span>${(monthlyStats.gross - monthlyStats.fuel).toFixed(2)}</span>
-                    </div>
-                    <div className="h-2 rounded-full bg-gray-800 overflow-hidden">
-                      <div className={`h-full rounded-full transition-all ${monthlyStats.gross - monthlyStats.fuel >= 0 ? 'bg-cyan-500/70' : 'bg-red-500/70'}`}
-                        style={{ width: `${Math.min(100, Math.abs((monthlyStats.gross - monthlyStats.fuel) / (monthlyStats.gross || 1)) * 100)}%` }} />
-                    </div>
-                  </div>
+                  ))}
                 </div>
               </div>
             )}
@@ -813,6 +1085,44 @@ export default function DriverDashboard() {
           </>
         )}
       </main>
+
+      {editingTrip && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-md mx-4 rounded-2xl border border-gray-700 bg-[#161b22] p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-lg font-semibold text-white">Editar Viaje</h3>
+              <button onClick={() => setEditingTrip(null)} className="text-gray-500 hover:text-white transition p-1"><X size={18} /></button>
+            </div>
+            <div className="space-y-4">
+              <div>
+                <label className="mb-1 block text-xs text-gray-400">Ingreso del Viaje</label>
+                <input type="text" inputMode="numeric" value={editForm.ingresoBruto}
+                  onChange={(e) => setEditForm({ ...editForm, ingresoBruto: formatMiles(e.target.value) })}
+                  className="input-premium w-full" />
+              </div>
+              <div>
+                <label className="mb-1 block text-xs text-gray-400">Kilómetros Recorridos</label>
+                <input type="number" step="0.1" min="0" value={editForm.kmRecorridos}
+                  onChange={(e) => setEditForm({ ...editForm, kmRecorridos: e.target.value })}
+                  className="input-premium w-full" />
+              </div>
+              <div className="rounded-lg bg-black/30 border border-gray-800 px-4 py-3">
+                <p className="text-xs text-gray-500 mb-1">Gasto de Combustible (calculado)</p>
+                <p className="text-sm font-medium text-cyan-400">{formatCOP((Number(editForm.kmRecorridos) / (vehiculo?.rendimientoKmGalon || 1)) * PRECIO_GALON)}</p>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button onClick={handleSaveEdit} disabled={editSaving}
+                  className="btn-premium flex-1">
+                  {editSaving ? 'Guardando...' : 'Guardar Cambios'}
+                </button>
+                <button onClick={() => setEditingTrip(null)}
+                  className="btn-ghost flex-1">Cancelar</button>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }
