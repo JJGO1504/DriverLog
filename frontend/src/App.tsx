@@ -16,6 +16,7 @@ export default function App() {
           <Routes>
             <Route path="/" element={<LandingPage />} />
             <Route path="/register" element={<RegisterFlow />} />
+            <Route path="/login" element={<RegisterFlow />} />
             <Route path="/dashboard" element={
               <ProtectedRoute allowedRoles={['USER', 'SUPERUSER']}>
                 <DriverDashboard />

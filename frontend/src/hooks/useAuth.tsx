@@ -48,6 +48,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const token = localStorage.getItem('driverlog_token');
     if (!token) {
+      // No token → clear stale user data
+      saveUser(null);
       setAuthReady(true);
       return;
     }

@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import { createUser, createVehicleForUser } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
-import { useNavigate } from 'react-router-dom';
 
 const streakBg = {
   background: `
@@ -30,8 +30,10 @@ const itemVariants = {
 export default function RegisterFlow() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const redirectTo = searchParams.get('redirect') || '';
 
-  const [isLogin, setIsLogin] = useState(false);
+  const [isLogin, setIsLogin] = useState(() => window.location.pathname === '/login');
   const [step, setStep] = useState(1);
   const [person, setPerson] = useState({ nombre: '', email: '', password: '' });
   const [vehicle, setVehicle] = useState({ marca: '', modelo: '', anio: '' });
@@ -68,7 +70,7 @@ export default function RegisterFlow() {
     setSubmitting(true);
     try {
       await login(loginForm.email, loginForm.password);
-      navigate('/dashboard');
+      navigate(redirectTo || '/dashboard');
     } catch (err: any) {
       setLoginError(err?.response?.data?.error || 'Credenciales inválidas');
       setSubmitting(false);

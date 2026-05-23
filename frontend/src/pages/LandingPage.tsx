@@ -49,17 +49,17 @@ export default function LandingPage() {
       {/* Navbar */}
       <nav className="relative z-20 mx-auto flex max-w-6xl items-center justify-between px-6 py-6 lg:px-8">
         <div className="flex items-center gap-3">
-          <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-cyan-500/15 border border-cyan-400/30">
-            <span className="text-cyan-400 text-sm font-black">D</span>
-          </span>
-          <span className="text-lg font-bold tracking-tight text-white">DriverLog</span>
+          <div className="flex items-center gap-3">
+            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-cyan-500/15 border border-cyan-400/30">
+              <span className="text-cyan-400 text-sm font-black">D</span>
+            </span>
+            <span className="text-lg font-bold tracking-tight text-white">DriverLog</span>
+          </div>
+          <div className="hidden sm:flex items-center gap-2">
+            <button onClick={() => navigate('/login')} className="btn-ghost text-sm px-4 py-2">Iniciar Sesión</button>
+            <button onClick={() => navigate('/register')} className="btn-premium text-sm px-4 py-2">Registrarse</button>
+          </div>
         </div>
-        <button
-          onClick={() => navigate('/register')}
-          className="btn-premium"
-        >
-          Registrar Usuario
-        </button>
       </nav>
 
       {/* Hero + Content */}
@@ -119,13 +119,15 @@ export default function LandingPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.9, duration: 0.5 }}
-          className="mt-14"
+          className="mt-14 flex flex-col sm:flex-row items-center justify-center gap-4"
         >
-          <button
-            onClick={() => navigate('/register')}
-            className="btn-premium px-10 py-3.5 text-base"
-          >
+          <button onClick={() => navigate('/register')}
+            className="btn-premium px-8 py-3.5 text-base w-full sm:w-auto">
             Registrar Usuario
+          </button>
+          <button onClick={() => navigate('/login')}
+            className="btn-ghost px-8 py-3.5 text-base w-full sm:w-auto border border-gray-700 hover:border-cyan-400/40 hover:text-cyan-300">
+            Iniciar Sesión
           </button>
         </motion.div>
       </main>
