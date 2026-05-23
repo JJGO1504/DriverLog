@@ -17,8 +17,15 @@ const CATS: CategoriaMantenimiento[] = ['MOTOR', 'FRENOS', 'SUSPENSION', 'LLANTA
 const formatCOP = (v: number) => Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(v);
 const toDigits = (v: string) => v.replace(/\D/g, '');
 const formatMiles = (v: string) => { const d = toDigits(v); return d ? d.replace(/\B(?=(\d{3})+(?!\d))/g, '.') : ''; };
-const todayStr = () => new Date().toISOString().slice(0, 10);
-const daysAgoStr = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
+const todayStr = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+const daysAgoStr = (n: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() - n);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
 
 // ISO week helpers (week starts Monday)
 const getISOWeek = (dateStr: string): number => {
