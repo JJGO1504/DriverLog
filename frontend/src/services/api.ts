@@ -22,6 +22,30 @@ export function getMaintenanceAlerts(role: Role) {
   return api.get('/admin/alerts', { headers: { 'x-user-role': role } }).then(response => response.data.alerts as string[]);
 }
 
+export function getAdminMetrics() {
+  const token = localStorage.getItem('driverlog_token');
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  headers['x-user-role'] = 'SUPERUSER';
+  return api.get('/admin/metrics', { headers }).then(res => res.data);
+}
+
+export function updateUserRole(userId: number, role: 'USER' | 'SUPERUSER') {
+  const token = localStorage.getItem('driverlog_token');
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  headers['x-user-role'] = 'SUPERUSER';
+  return api.patch(`/admin/users/${userId}/role`, { role }, { headers }).then(res => res.data.user);
+}
+
+export function createAdminUser(payload: { nombre: string; email: string; password: string }) {
+  const token = localStorage.getItem('driverlog_token');
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  headers['x-user-role'] = 'SUPERUSER';
+  return api.post('/admin/create-admin', payload, { headers }).then(res => res.data.user);
+}
+
 // -- Trips --
 export function submitTrip(trip: { fecha: string; ingresoBruto: number; kmRecorridos: number; gastoCombustible: number; userId: number; vehicleId: number }) {
   return api.post('/trips', trip).then(response => response.data);

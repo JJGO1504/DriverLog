@@ -33,4 +33,31 @@ export class AdminService {
       return TripService.checkMaintenanceAlerts(vehicle, maintenances);
     });
   }
+
+  static async getMetrics() {
+    const [totalUsers, totalTripsAgg, totalMaintAgg, users, recentMaintenances] = await Promise.all([
+      prisma.user.count(),
+      prisma.trip.aggregate({ _sum: { ingresoBruto: true } }),
+      prisma.maintenance.aggregate({ _sum: { costoReal: true } }),
+      prisma.user.findMany({ select: { id: true, nombre: true, email: true, role: true, avatarUrl: true } }),
+      prisma.maintenance.findMany({
+        where: { status: 'REALIZADO' },
+        orderBy: { fechaEjecucion: 'desc' },
+        take: 10,
+        include: { vehicle: true },
+      }),
+    ]);
+
+    const totalIncome = totalTripsAgg._sum.ingresoBruto || 0;
+    const totalMaintenanceCost = totalMaintAgg._sum.costoReal || 0;
+
+    return {
+      totalUsers,
+      totalIncome,
+      totalMaintenanceCost,
+      netBalance: totalIncome - totalMaintenanceCost,
+      users,
+      recentMaintenances,
+    };
+  }
 }

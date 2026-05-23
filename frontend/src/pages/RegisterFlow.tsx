@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Eye, EyeOff } from 'lucide-react';
 import { createUser, createVehicleForUser } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
@@ -39,6 +40,8 @@ export default function RegisterFlow() {
   const [userId, setUserId] = useState<number | null>(null);
   const [errors, setErrors] = useState<Record<string, boolean>>({});
   const [loginError, setLoginError] = useState('');
+  const [showLoginPwd, setShowLoginPwd] = useState(false);
+  const [showRegPwd, setShowRegPwd] = useState(false);
 
   const next = () => setStep(s => Math.min(2, s + 1));
   const back = () => setStep(s => Math.max(1, s - 1));
@@ -176,15 +179,21 @@ export default function RegisterFlow() {
                   </div>
                   <div>
                     <label className="block text-sm text-gray-400 mb-1">Contraseña</label>
-                    <input
-                      name="password"
-                      type="password"
-                      required
-                      value={loginForm.password}
-                      onChange={handleLoginChange}
-                      placeholder="••••••••"
-                      className="input-premium w-full"
-                    />
+                    <div className="relative">
+                      <input
+                        name="password"
+                        type={showLoginPwd ? 'text' : 'password'}
+                        required
+                        value={loginForm.password}
+                        onChange={handleLoginChange}
+                        placeholder="••••••••"
+                        className="input-premium w-full pr-10"
+                      />
+                      <button type="button" onClick={() => setShowLoginPwd(!showLoginPwd)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition">
+                        {showLoginPwd ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
                   </div>
 
                   {loginError && (
@@ -265,18 +274,24 @@ export default function RegisterFlow() {
 
                   <motion.div variants={itemVariants} className="mb-6">
                     <label className="block text-sm text-gray-400 mb-1">Contraseña</label>
-                    <input
-                      name="password"
-                      type="password"
-                      required
-                      value={person.password}
-                      onChange={handlePersonChange}
-                      className={`input-premium w-full ${
-                        errors.password
-                          ? '!border-red-400 !ring-2 !ring-red-500/60 animate-pulse'
-                          : ''
-                      }`}
-                    />
+                    <div className="relative">
+                      <input
+                        name="password"
+                        type={showRegPwd ? 'text' : 'password'}
+                        required
+                        value={person.password}
+                        onChange={handlePersonChange}
+                        className={`input-premium w-full pr-10 ${
+                          errors.password
+                            ? '!border-red-400 !ring-2 !ring-red-500/60 animate-pulse'
+                            : ''
+                        }`}
+                      />
+                      <button type="button" onClick={() => setShowRegPwd(!showRegPwd)}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition">
+                        {showRegPwd ? <EyeOff size={18} /> : <Eye size={18} />}
+                      </button>
+                    </div>
                   </motion.div>
 
                   <motion.div variants={itemVariants} className="flex flex-col gap-3">
