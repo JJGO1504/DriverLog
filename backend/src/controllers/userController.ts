@@ -4,19 +4,27 @@ import bcrypt from 'bcrypt';
 
 const prisma = new PrismaClient();
 
+const userWithoutPassword = (user: any) => {
+  const { password, ...rest } = user;
+  return rest;
+};
+
 export class UserController {
   static async updateUser(req: Request, res: Response) {
     try {
       const userId = parseInt(req.params.id, 10);
-      const { nombre } = req.body;
+      const { nombre, avatarUrl } = req.body;
       if (!nombre || !nombre.trim()) {
         return res.status(400).json({ error: 'Nombre es requerido' });
       }
       const user = await prisma.user.update({
         where: { id: userId },
-        data: { nombre: nombre.trim() },
+        data: {
+          nombre: nombre.trim(),
+          ...(avatarUrl !== undefined && { avatarUrl }),
+        },
       });
-      res.json({ user });
+      res.json({ user: userWithoutPassword(user) });
     } catch (error: any) {
       console.error('Error updating user:', error);
       res.status(500).json({ error: 'Error interno del servidor' });
@@ -75,7 +83,7 @@ export class UserController {
         return res.status(404).json({ error: 'Usuario no encontrado' });
       }
 
-      res.json(user);
+      res.json(userWithoutPassword(user));
     } catch (error: any) {
       console.error('Error fetching user profile:', error);
       res.status(500).json({ error: 'Error interno del servidor' });
@@ -104,7 +112,7 @@ export class UserController {
         },
       });
 
-      res.status(201).json({ user });
+      res.status(201).json({ user: userWithoutPassword(user) });
     } catch (error: any) {
       console.error('Error creating user:', error);
       res.status(500).json({ error: 'Error interno del servidor' });

@@ -37,7 +37,14 @@ export function getUserMonthlyStats(userId: number, month: number, year: number)
 
 // -- Auth --
 export function loginUser(email: string, password: string) {
-  return api.post('/auth/login', { email, password }).then(res => res.data);
+  return api.post('/auth/login', { email, password }).then(res => {
+    if (res.data.token) setAuthToken(res.data.token);
+    return res.data;
+  });
+}
+
+export function fetchCurrentUser() {
+  return api.get('/auth/me').then(res => res.data.user);
 }
 
 export function createUser(payload: { nombre: string; email: string; password: string }) {
@@ -45,7 +52,7 @@ export function createUser(payload: { nombre: string; email: string; password: s
 }
 
 // -- Users & Vehicles --
-export function updateUser(userId: number, payload: { nombre: string }) {
+export function updateUser(userId: number, payload: { nombre: string; avatarUrl?: string }) {
   return api.patch(`/users/${userId}`, payload).then(res => res.data);
 }
 
@@ -84,6 +91,10 @@ export function seedMaintenancePlan(vehicleId: number) {
 
 export function getMaintenanceAlertsByVehicle(vehicleId: number) {
   return api.get('/maintenances/alerts', { params: { vehicleId } }).then(res => res.data.alerts);
+}
+
+export function completeMaintenance(id: number, costoReal: number) {
+  return api.put(`/maintenances/${id}/complete`, { costoReal }).then(res => res.data.maintenance);
 }
 
 // -- Fuel --

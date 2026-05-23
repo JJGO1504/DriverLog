@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { createUser, createVehicleForUser, loginUser } from '../services/api';
+import { createUser, createVehicleForUser } from '../services/api';
 import { useAuth } from '../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 
@@ -27,7 +27,7 @@ const itemVariants = {
 };
 
 export default function RegisterFlow() {
-  const { loginAsUser } = useAuth();
+  const { login } = useAuth();
   const navigate = useNavigate();
 
   const [isLogin, setIsLogin] = useState(false);
@@ -64,8 +64,7 @@ export default function RegisterFlow() {
     }
     setSubmitting(true);
     try {
-      const res = await loginUser(loginForm.email, loginForm.password);
-      loginAsUser();
+      await login(loginForm.email, loginForm.password);
       navigate('/dashboard');
     } catch (err: any) {
       setLoginError(err?.response?.data?.error || 'Credenciales inválidas');
@@ -115,10 +114,8 @@ export default function RegisterFlow() {
       const payload = { marca: vehicle.marca, modelo: vehicle.modelo, anio: Number(vehicle.anio) };
       await createVehicleForUser(userId, payload);
       setSubmitting(false);
-      loginAsUser();
-      setTimeout(() => {
-        navigate('/dashboard');
-      }, 1200);
+      await login(person.email, person.password);
+      navigate('/dashboard');
     } catch (err: any) {
       setSubmitting(false);
       alert(err?.response?.data?.error || 'Error creando vehículo');

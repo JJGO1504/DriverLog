@@ -1,11 +1,13 @@
 export type CategoriaMantenimiento = 'MOTOR' | 'FRENOS' | 'SUSPENSION' | 'LLANTAS' | 'OTROS';
 export type Role = 'USER' | 'SUPERUSER';
+export type MaintStatus = 'PENDIENTE' | 'REALIZADO';
 
 export interface User {
   id: number;
   nombre: string;
   email: string;
   role: Role;
+  avatarUrl?: string | null;
 }
 
 export interface Vehicle {
@@ -39,11 +41,16 @@ export interface Maintenance {
   categoria: CategoriaMantenimiento;
   intervaloKm: number;
   costoEstimado: number;
+  status: MaintStatus;
+  costoReal: number | null;
+  fechaEjecucion: string | null;
+  kilometrajeRegistro: number | null;
   vehicleId: number | null;
 }
 
 export interface MaintenanceAlert extends Maintenance {
   remainingKm: number;
+  kmDesdeBase: number;
 }
 
 export interface Trip {

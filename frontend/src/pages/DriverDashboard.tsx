@@ -20,6 +20,28 @@ const formatMiles = (v: string) => { const d = toDigits(v); return d ? d.replace
 const todayStr = () => new Date().toISOString().slice(0, 10);
 const daysAgoStr = (n: number) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().slice(0, 10); };
 
+// ISO week helpers (week starts Monday)
+const getISOWeek = (dateStr: string): number => {
+  const d = new Date(dateStr.slice(0, 10) + 'T12:00:00');
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  return Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+};
+const getWeekStartEnd = (year: number, week: number): { start: string; end: string } => {
+  const jan4 = new Date(year, 0, 4);
+  const day = jan4.getDay() || 7;
+  const mon = new Date(jan4.getTime() - (day - 1) * 86400000 + (week - 1) * 7 * 86400000);
+  const sun = new Date(mon.getTime() + 6 * 86400000);
+  return { start: mon.toISOString().slice(0, 10), end: sun.toISOString().slice(0, 10) };
+};
+const formatShortDate = (iso: string) => {
+  const d = new Date(iso + 'T12:00:00');
+  return d.toLocaleDateString('es-CO', { day: '2-digit', month: '2-digit' });
+};
+const monthNames = ['', 'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+const dayNames = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+
 type NavItem = 'dashboard' | 'register' | 'fuel' | 'vehicles' | 'maintenance' | 'analytics' | 'profile';
 const navItems: { id: NavItem; label: string; icon: React.ElementType }[] = [
   { id: 'dashboard', label: 'Panel de Control', icon: LayoutDashboard },
@@ -33,18 +55,17 @@ const navItems: { id: NavItem; label: string; icon: React.ElementType }[] = [
 interface TripWithVehicle extends Trip { vehicle?: Vehicle; }
 
 export default function DriverDashboard() {
-  const { currentUser, logout } = useAuth();
+  const { currentUser, logout, refreshUser } = useAuth();
   const { addToast } = useToast();
   const navigate = useNavigate();
   const [activeNav, setActiveNav] = useState<NavItem>('dashboard');
   const [loading, setLoading] = useState(true);
-  const [usuario, setUsuario] = useState<User | null>(null);
   const [vehiculos, setVehiculos] = useState<Vehicle[]>([]);
   const [vehiculoActivo, setVehiculoActivo] = useState<number | null>(null);
   const [trips, setTrips] = useState<TripWithVehicle[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null);
+  const [photoPreview, setPhotoPreview] = useState<string | null>(currentUser?.avatarUrl ?? null);
 
   const vehiculo = useMemo(() => vehiculos.find(v => v.id === vehiculoActivo) ?? vehiculos[0] ?? null, [vehiculos, vehiculoActivo]);
 
@@ -55,7 +76,7 @@ export default function DriverDashboard() {
   const [vehicleDetail, setVehicleDetail] = useState({ placa: '', kilometrajeActual: '', valorCompra: '', valorAlquiler: '', vidaUtilKm: '', rendimientoKmGalon: '' });
   const [vehicleSaving, setVehicleSaving] = useState(false);
   const [vehicleSaved, setVehicleSaved] = useState(false);
-  const [profileName, setProfileName] = useState('');
+  const [profileName, setProfileName] = useState(currentUser?.nombre ?? '');
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileSaved, setProfileSaved] = useState(false);
   const [editingTrip, setEditingTrip] = useState<TripWithVehicle | null>(null);
@@ -70,6 +91,7 @@ export default function DriverDashboard() {
   const [maintSubmitting, setMaintSubmitting] = useState(false);
   const [seedLoading, setSeedLoading] = useState(false);
   const [deleteMaintId, setDeleteMaintId] = useState<number | null>(null);
+  const [completeMaint, setCompleteMaint] = useState<{ id: number; descripcion: string; costoReal: string } | null>(null);
 
   // Gasolina persistente
   const [fuelEntries, setFuelEntries] = useState<FuelEntry[]>([]);
@@ -94,6 +116,7 @@ export default function DriverDashboard() {
   const [goalSemanal, setGoalSemanal] = useState(() => Number(localStorage.getItem('goal_semanal') || '0'));
   const [goalMensual, setGoalMensual] = useState(() => Number(localStorage.getItem('goal_mensual') || '0'));
   const [editGoal, setEditGoal] = useState<{ tipo: string; valor: string } | null>(null);
+  const [editingGoalInline, setEditingGoalInline] = useState<{ tipo: string; valor: string } | null>(null);
 
   const saveGoal = (tipo: string, val: number) => {
     localStorage.setItem(`goal_${tipo}`, String(val));
@@ -101,6 +124,7 @@ export default function DriverDashboard() {
     else if (tipo === 'semanal') setGoalSemanal(val);
     else if (tipo === 'mensual') setGoalMensual(val);
     setEditGoal(null);
+    setEditingGoalInline(null);
     addToast('Meta guardada', 'success');
   };
 
@@ -112,13 +136,11 @@ export default function DriverDashboard() {
         api.getUserProfile(currentUser.id),
         api.getUserVehicles(currentUser.id),
       ]);
-      setUsuario(profileData);
       setProfileName(profileData.nombre);
       setTrips(profileData.trips ?? []);
       setVehiculos(vehData.vehicles ?? []);
       setPage(1);
     } catch {
-      setUsuario(null);
       setVehiculos([]);
       addToast('Error cargando datos', 'error');
     } finally {
@@ -259,8 +281,11 @@ export default function DriverDashboard() {
     if (!currentUser || !profileName.trim()) return;
     setProfileSaving(true);
     try {
-      const { user } = await api.updateUser(currentUser.id, { nombre: profileName.trim() });
-      setUsuario(prev => prev ? { ...prev, nombre: user.nombre } : prev);
+      await api.updateUser(currentUser.id, {
+        nombre: profileName.trim(),
+        avatarUrl: photoPreview || currentUser.avatarUrl || undefined,
+      });
+      await refreshUser();
       setProfileSaved(true);
       setTimeout(() => setProfileSaved(false), 2000);
       addToast('Perfil guardado', 'success');
@@ -332,6 +357,16 @@ export default function DriverDashboard() {
     catch { addToast('Error cargando plan', 'error'); } finally { setSeedLoading(false); }
   };
 
+  const handleCompleteMaintenance = async () => {
+    if (!completeMaint) return;
+    try {
+      await api.completeMaintenance(completeMaint.id, Number(completeMaint.costoReal.replace(/\./g, '')) || 0);
+      setCompleteMaint(null);
+      await loadMaintenances();
+      addToast('Mantenimiento completado', 'success');
+    } catch { addToast('Error completando mantenimiento', 'error'); }
+  };
+
   // Document handlers
   const handleAddDocument = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -370,6 +405,46 @@ export default function DriverDashboard() {
   const totalEarnings = trips.reduce((s, t) => s + t.ingresoBruto, 0);
   const totalFuel = trips.reduce((s, t) => s + t.gastoCombustible, 0);
   const totalNet = trips.reduce((s, t) => s + calcNetProfit(t), 0);
+  const totalMaintCost = maintenances.filter(m => m.status === 'REALIZADO' && m.costoReal != null).reduce((s, m) => s + m.costoReal!, 0);
+  const totalNetAfterMaint = totalNet - totalMaintCost;
+
+  // -- Advanced analytics state --
+  const [analyticsMonth, setAnalyticsMonth] = useState(() => new Date().getMonth() + 1);
+  const [analyticsYear, setAnalyticsYear] = useState(() => new Date().getFullYear());
+  const [expandedWeeks, setExpandedWeeks] = useState<Set<string>>(new Set());
+  const [expandedDays, setExpandedDays] = useState<Set<string>>(new Set());
+
+  const toggleWeek = (w: string) => setExpandedWeeks(p => { const n = new Set(p); if (n.has(w)) n.delete(w); else n.add(w); return n; });
+  const toggleDay = (d: string) => setExpandedDays(p => { const n = new Set(p); if (n.has(d)) n.delete(d); else n.add(d); return n; });
+
+  const analyticsTrips = useMemo(() => {
+    const start = `${analyticsYear}-${String(analyticsMonth).padStart(2, '0')}-01`;
+    const end = analyticsMonth === 12
+      ? `${analyticsYear + 1}-01-01`
+      : `${analyticsYear}-${String(analyticsMonth + 1).padStart(2, '0')}-01`;
+    return trips.filter(t => { const d = t.fecha.slice(0, 10); return d >= start && d < end; });
+  }, [trips, analyticsMonth, analyticsYear]);
+
+  // Maintenance costs filtered within a date range
+  const maintCostInRange = (from: string, to: string) =>
+    maintenances.filter(m => m.status === 'REALIZADO' && m.costoReal != null && m.fechaEjecucion && m.fechaEjecucion.slice(0, 10) >= from && m.fechaEjecucion.slice(0, 10) <= to)
+      .reduce((s, m) => s + m.costoReal!, 0);
+
+  const calcPeriodMetrics = (periodTrips: TripWithVehicle[], from: string, to: string) => {
+    const gross = periodTrips.reduce((s, t) => s + t.ingresoBruto, 0);
+    const fuel = periodTrips.reduce((s, t) => s + t.gastoCombustible, 0);
+    const net = periodTrips.reduce((s, t) => s + calcNetProfit(t), 0);
+    const reserve = gross * 0.10;
+    const maint = maintCostInRange(from, to);
+    return { gross, fuel, net, reserve, maint, finalNet: net - maint };
+  };
+
+  const { gross: aGross, fuel: aFuel, net: aNet, reserve: aReserve, maint: aMaint, finalNet: aFinalNet } =
+    analyticsTrips.length > 0
+      ? calcPeriodMetrics(analyticsTrips,
+          `${analyticsYear}-${String(analyticsMonth).padStart(2, '0')}-01`,
+          analyticsMonth === 12 ? `${analyticsYear + 1}-01-01` : `${analyticsYear}-${String(analyticsMonth + 1).padStart(2, '0')}-01`)
+      : { gross: 0, fuel: 0, net: 0, reserve: 0, maint: 0, finalNet: 0 };
 
   const filteredTrips = useMemo(() => {
     const now = todayStr();
@@ -383,6 +458,7 @@ export default function DriverDashboard() {
   const sGross = filteredTrips.reduce((s, t) => s + t.ingresoBruto, 0);
   const sFuel = filteredTrips.reduce((s, t) => s + t.gastoCombustible, 0);
   const sNet = filteredTrips.reduce((s, t) => s + calcNetProfit(t), 0);
+  const sNetAfterMaint = sNet - totalMaintCost;
   const sKm = filteredTrips.reduce((s, t) => s + t.kmRecorridos, 0);
 
   // Meta progress
@@ -403,7 +479,7 @@ export default function DriverDashboard() {
               <div className="relative mx-auto mb-4 h-28 w-28">
                 <div className="flex h-full w-full items-center justify-center rounded-full bg-cyan-500/20 border-2 border-cyan-400/40 overflow-hidden">
                   {photoPreview ? <img src={photoPreview} alt="" className="h-full w-full object-cover" /> :
-                    <span className="text-3xl font-bold text-cyan-300">{usuario?.nombre?.charAt(0) ?? '?'}</span>}
+                    <span className="text-3xl font-bold text-cyan-300">{currentUser?.nombre?.charAt(0) ?? '?'}</span>}
                 </div>
                 <button onClick={() => fileInputRef.current?.click()}
                   className="absolute bottom-0 right-0 flex h-8 w-8 items-center justify-center rounded-full bg-cyan-500 border-2 border-[#161b22] text-black hover:bg-cyan-400">
@@ -419,7 +495,7 @@ export default function DriverDashboard() {
                 </div>
                 <div>
                   <label className="mb-1 block text-xs text-gray-400">Correo Electrónico</label>
-                  <input value={usuario?.email ?? ''} readOnly
+                  <input value={currentUser?.email ?? ''} readOnly
                     className="w-full rounded-xl border border-dashed border-gray-700 bg-gray-800/50 px-4 py-3 text-gray-400 outline-none cursor-not-allowed" />
                 </div>
               </div>
@@ -476,10 +552,27 @@ export default function DriverDashboard() {
               </div>
               <div className="grid grid-cols-3 gap-4">
                 {(['diario', 'semanal', 'mensual'] as const).map(p => (
-                  <div key={p} className="rounded-xl border border-gray-800 bg-black/30 p-4">
+                  <div key={p} className="rounded-xl border border-gray-800 bg-black/30 p-4 group">
                     <div className="flex justify-between text-xs text-gray-500 mb-2">
                       <span className="capitalize">{p === 'diario' ? 'Hoy' : p === 'semanal' ? 'Semana' : 'Mes'}</span>
-                      <span>{formatCOP(goalProgress[p].earned)} / {formatCOP(goalProgress[p].goal)}</span>
+                      {editingGoalInline?.tipo === p ? (
+                        <div className="flex items-center gap-1">
+                          <input type="text" inputMode="numeric" value={editingGoalInline.valor}
+                            onChange={e => setEditingGoalInline({ ...editingGoalInline, valor: formatMiles(e.target.value) })}
+                            onBlur={() => { const v = Number(editingGoalInline.valor.replace(/\./g, '')); if (v > 0) saveGoal(p, v); else setEditingGoalInline(null); }}
+                            onKeyDown={e => { if (e.key === 'Enter') { const v = Number(editingGoalInline.valor.replace(/\./g, '')); if (v > 0) saveGoal(p, v); else setEditingGoalInline(null); } if (e.key === 'Escape') setEditingGoalInline(null); }}
+                            className="w-24 bg-gray-800 border border-cyan-500/40 rounded px-1.5 py-0.5 text-xs text-cyan-300 text-right outline-none"
+                            autoFocus />
+                          <button onMouseDown={() => { const v = Number(editingGoalInline.valor.replace(/\./g, '')); if (v > 0) saveGoal(p, v); else setEditingGoalInline(null); }}
+                            className="text-green-400 hover:text-green-300 text-[10px]">✓</button>
+                        </div>
+                      ) : (
+                        <button onClick={() => setEditingGoalInline({ tipo: p, valor: formatMiles(String(goalProgress[p].goal)) })}
+                          className="text-gray-400 hover:text-cyan-300 transition flex items-center gap-1">
+                          <span>{formatCOP(goalProgress[p].earned)} / {formatCOP(goalProgress[p].goal)}</span>
+                          <Edit3 size={11} className="opacity-0 group-hover:opacity-100 transition" />
+                        </button>
+                      )}
                     </div>
                     <div className="h-2 rounded-full bg-gray-800 overflow-hidden">
                       <div className={`h-full rounded-full transition-all ${goalProgress[p].pct >= 100 ? 'bg-green-500' : 'bg-cyan-500'}`}
@@ -575,9 +668,10 @@ export default function DriverDashboard() {
                   <div className="space-y-3">
                     <div className="flex justify-between text-sm"><span className="text-gray-400">Total Ingresos</span><span className="text-white font-medium">{formatCOP(totalEarnings)}</span></div>
                     <div className="flex justify-between text-sm"><span className="text-gray-400">Total Combustible</span><span className="text-red-400 font-medium">-{formatCOP(totalFuel)}</span></div>
+                    {totalMaintCost > 0 && <div className="flex justify-between text-sm"><span className="text-gray-400">Mantenimientos</span><span className="text-red-400 font-medium">-{formatCOP(totalMaintCost)}</span></div>}
                     <div className="border-t border-gray-800 pt-2 flex justify-between text-sm">
                       <span className="text-gray-300">Ganancia Neta</span>
-                      <span className={`font-bold ${totalNet >= 0 ? 'text-green-400' : 'text-red-400'}`}>{formatCOP(totalNet)}</span>
+                      <span className={`font-bold ${totalNetAfterMaint >= 0 ? 'text-green-400' : 'text-red-400'}`}>{formatCOP(totalNetAfterMaint)}</span>
                     </div>
                   </div>
                 </div>
@@ -886,24 +980,52 @@ export default function DriverDashboard() {
               ) : (
                 <div className="space-y-2">
                   {maintenances.map(m => {
-                    const kmDiff = m.intervaloKm - (vehiculo?.kilometrajeActual ?? 0);
-                    const isDue = kmDiff <= 1000;
+                    const baseKm = m.status === 'REALIZADO' && m.kilometrajeRegistro != null ? m.kilometrajeRegistro : 0;
+                    const kmDesdeBase = (vehiculo?.kilometrajeActual ?? 0) - baseKm;
+                    const remainingKm = m.intervaloKm - kmDesdeBase;
+                    const isDue = m.status === 'PENDIENTE' && remainingKm <= 1000;
+                    const realizado = m.status === 'REALIZADO';
                     return (
-                      <div key={m.id} className={`flex items-center justify-between rounded-lg border px-4 py-3 text-sm ${isDue ? 'border-amber-500/30 bg-amber-500/5' : 'border-gray-800 bg-black/30'}`}>
+                      <div key={m.id} className={`flex items-center justify-between rounded-lg border px-4 py-3 text-sm ${realizado ? 'border-green-500/20 bg-green-500/5' : isDue ? 'border-amber-500/30 bg-amber-500/5' : 'border-gray-800 bg-black/30'}`}>
                         <div className="flex-1">
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-medium tracking-wider text-gray-500">[{m.categoria}]</span>
-                            <span className="text-white font-medium">{m.descripcion}</span>
+                            <span className={`font-medium ${realizado ? 'text-green-400 line-through' : 'text-white'}`}>{m.descripcion}</span>
+                            {realizado && <span className="text-[10px] text-green-500 bg-green-500/10 px-2 py-0.5 rounded-full">REALIZADO</span>}
                           </div>
                           <div className="flex gap-4 mt-1 text-xs text-gray-500">
                             <span>Cada {m.intervaloKm.toLocaleString('es-CO')} km</span>
-                            <span>Costo: {formatCOP(m.costoEstimado)}</span>
+                            {realizado ? (
+                              <span className="text-green-400">Costo real: {m.costoReal != null ? formatCOP(m.costoReal) : '—'}</span>
+                            ) : (
+                              <span>Costo est.: {formatCOP(m.costoEstimado)}</span>
+                            )}
+                            {realizado && m.fechaEjecucion && (
+                              <span>Ejecutado: {m.fechaEjecucion.slice(0, 10)}</span>
+                            )}
                           </div>
-                          {isDue && <p className="text-xs text-amber-400 mt-1">
-                            {kmDiff <= 0 ? `⚠ Vencido por ${Math.abs(kmDiff).toLocaleString('es-CO')} km` : `⚠ Próximo en ${kmDiff.toLocaleString('es-CO')} km`}
-                          </p>}
+                          {!realizado && isDue && (
+                            <p className="text-xs text-amber-400 mt-1">
+                              {remainingKm <= 0
+                                ? `⚠ Vencido por ${Math.abs(remainingKm).toLocaleString('es-CO')} km`
+                                : `⚠ Próximo en ${remainingKm.toLocaleString('es-CO')} km`}
+                            </p>
+                          )}
+                          {realizado && m.kilometrajeRegistro != null && (
+                            <p className="text-xs text-gray-600 mt-1">
+                              Último cambio a los {m.kilometrajeRegistro.toLocaleString('es-CO')} km — recorridos {kmDesdeBase.toFixed(0)} km desde entonces
+                            </p>
+                          )}
                         </div>
-                        <button onClick={() => setDeleteMaintId(m.id)} className="text-gray-500 hover:text-red-400 transition p-1 ml-3"><X size={15} /></button>
+                        <div className="flex items-center gap-2 ml-3">
+                          {!realizado && (
+                            <button onClick={() => setCompleteMaint({ id: m.id, descripcion: m.descripcion, costoReal: '' })}
+                              className="text-[10px] bg-green-500/10 border border-green-500/30 text-green-400 px-3 py-1 rounded-lg hover:bg-green-500/20 transition">
+                              Completar
+                            </button>
+                          )}
+                          <button onClick={() => setDeleteMaintId(m.id)} className="text-gray-500 hover:text-red-400 transition p-1"><X size={15} /></button>
+                        </div>
                       </div>
                     );
                   })}
@@ -915,112 +1037,196 @@ export default function DriverDashboard() {
 
       case 'analytics':
         return (
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="max-w-2xl mx-auto space-y-6">
-            {/* Mini goals editor modal */}
-            {editGoal && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-                <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
-                  className="w-full max-w-xs mx-4 rounded-2xl border border-gray-700 bg-[#161b22] p-6 shadow-2xl">
-                  <h3 className="text-sm font-semibold text-white mb-4">Editar Meta {editGoal.tipo === 'diario' ? 'Diaria' : editGoal.tipo === 'semanal' ? 'Semanal' : 'Mensual'}</h3>
-                  <input type="text" inputMode="numeric" value={editGoal.valor}
-                    onChange={e => setEditGoal({ ...editGoal, valor: formatMiles(e.target.value) })}
-                    placeholder="Monto objetivo" className="input-premium w-full mb-4" />
-                  <div className="flex gap-3">
-                    <button onClick={() => saveGoal(editGoal.tipo, Number(editGoal.valor.replace(/\./g, '')) || 0)}
-                      className="btn-premium flex-1">Guardar</button>
-                    <button onClick={() => setEditGoal(null)} className="btn-ghost flex-1">Cancelar</button>
-                  </div>
-                </motion.div>
-              </div>
-            )}
-
-            <div className="card p-6">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="heading-lg">Estadísticas</h2>
-                <div className="flex gap-1 bg-black/40 rounded-lg p-1 border border-gray-800">
-                  {(['diario', 'semanal', 'mensual'] as const).map(tab => (
-                    <button key={tab} onClick={() => setStatsTab(tab)}
-                      className={`px-4 py-1.5 text-xs rounded-md font-medium transition ${statsTab === tab ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-400/30' : 'text-gray-500 hover:text-gray-300'}`}>
-                      {tab === 'diario' ? 'Diario' : tab === 'semanal' ? 'Semanal' : 'Mensual'}
-                    </button>
-                  ))}
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="max-w-3xl mx-auto space-y-6">
+            {/* Month/Year selector */}
+            <div className="card p-4">
+              <div className="flex items-center justify-between">
+                <button onClick={() => {
+                  if (analyticsMonth === 1) { setAnalyticsMonth(12); setAnalyticsYear(y => y - 1); }
+                  else setAnalyticsMonth(m => m - 1);
+                }} className="p-2 text-gray-500 hover:text-white transition"><ChevronLeft size={20} /></button>
+                <div className="flex items-center gap-3">
+                  <span className="text-lg font-bold text-white tracking-tight">{monthNames[analyticsMonth]} {analyticsYear}</span>
+                  <select value={analyticsYear} onChange={e => setAnalyticsYear(Number(e.target.value))}
+                    className="bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-sm text-gray-300 outline-none">
+                    {Array.from({ length: 5 }, (_, i) => new Date().getFullYear() - 2 + i).map(y =>
+                      <option key={y} value={y}>{y}</option>)}
+                  </select>
                 </div>
+                <button onClick={() => {
+                  if (analyticsMonth === 12) { setAnalyticsMonth(1); setAnalyticsYear(y => y + 1); }
+                  else setAnalyticsMonth(m => m + 1);
+                }} className="p-2 text-gray-500 hover:text-white transition"><ChevronRight size={20} /></button>
               </div>
-
-              {/* Goal progress */}
-              {goalProgress[statsTab].goal > 0 && (
-                <div className="mb-4 rounded-lg border border-gray-800 bg-black/30 p-4">
-                  <div className="flex justify-between text-xs text-gray-500 mb-1">
-                    <span>Meta: {formatCOP(goalProgress[statsTab].goal)}</span>
-                    <span>{formatCOP(goalProgress[statsTab].earned)} ({goalProgress[statsTab].pct.toFixed(0)}%)</span>
-                  </div>
-                  <div className="h-2 rounded-full bg-gray-800 overflow-hidden">
-                    <div className={`h-full rounded-full transition-all ${goalProgress[statsTab].pct >= 100 ? 'bg-green-500' : 'bg-cyan-500'}`}
-                      style={{ width: `${goalProgress[statsTab].pct}%` }} />
-                  </div>
-                </div>
-              )}
-
-              {filteredTrips.length === 0 ? (
-                <p className="text-sm text-gray-500 text-center py-8">No hay viajes en este período.</p>
-              ) : (
-                <>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="rounded-xl border border-gray-800 bg-black/30 p-4 text-center">
-                      <DollarSign size={18} className="text-green-400 mx-auto mb-1" />
-                      <p className="text-lg font-bold text-green-400">{formatCOP(sGross)}</p>
-                      <p className="text-[10px] text-gray-500 uppercase tracking-wider">Ingresos</p>
-                    </div>
-                    <div className="rounded-xl border border-gray-800 bg-black/30 p-4 text-center">
-                      <Flame size={18} className="text-red-400 mx-auto mb-1" />
-                      <p className="text-lg font-bold text-red-400">{formatCOP(sFuel)}</p>
-                      <p className="text-[10px] text-gray-500 uppercase tracking-wider">Combustible</p>
-                    </div>
-                    <div className="rounded-xl border border-gray-800 bg-black/30 p-4 text-center">
-                      <BarChart3 size={18} className={`mx-auto mb-1 ${sNet >= 0 ? 'text-green-400' : 'text-red-400'}`} />
-                      <p className={`text-lg font-bold ${sNet >= 0 ? 'text-green-400' : 'text-red-400'}`}>{formatCOP(sNet)}</p>
-                      <p className="text-[10px] text-gray-500 uppercase tracking-wider">Ganancia Neta</p>
-                    </div>
-                  </div>
-                  <div className="mt-4 flex gap-4 text-xs text-gray-500">
-                    <span>Viajes: {filteredTrips.length}</span>
-                    <span>Kilómetros: {sKm.toFixed(1)} km</span>
-                  </div>
-                </>
-              )}
             </div>
 
-            {/* Gastos por categoría de mantenimiento */}
-            {maintenances.length > 0 && (
-              <div className="card p-6">
-                <h3 className="mb-4 text-sm font-semibold text-white">Gastos Estimados por Categoría</h3>
-                <div className="space-y-2">
-                  {CATS.map(cat => {
-                    const total = maintenances.filter(m => m.categoria === cat).reduce((s, m) => s + m.costoEstimado, 0);
-                    if (total === 0) return null;
+            {/* Summary cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="rounded-xl border border-gray-800 bg-black/30 p-4 text-center">
+                <DollarSign size={18} className="text-green-400 mx-auto mb-1" />
+                <p className="text-lg font-bold text-green-400">{formatCOP(aGross)}</p>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider">Ingresos Brutos</p>
+              </div>
+              <div className="rounded-xl border border-gray-800 bg-black/30 p-4 text-center">
+                <Flame size={18} className="text-red-400 mx-auto mb-1" />
+                <p className="text-lg font-bold text-red-400">{formatCOP(aFuel)}</p>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider">Combustible</p>
+              </div>
+              <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-4 text-center">
+                <BarChart3 size={18} className="text-cyan-400 mx-auto mb-1" />
+                <p className="text-lg font-bold text-cyan-400">{formatCOP(aReserve)}</p>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider">Fondo Reserva (10%)</p>
+              </div>
+              <div className="rounded-xl border border-gray-800 bg-black/30 p-4 text-center">
+                <BarChart3 size={18} className={`mx-auto mb-1 ${aFinalNet >= 0 ? 'text-green-400' : 'text-red-400'}`} />
+                <p className={`text-lg font-bold ${aFinalNet >= 0 ? 'text-green-400' : 'text-red-400'}`}>{formatCOP(aFinalNet)}</p>
+                <p className="text-[10px] text-gray-500 uppercase tracking-wider">Ganancia Neta Real</p>
+                {aMaint > 0 && <p className="text-[10px] text-gray-600">-{formatCOP(aMaint)} mantenimientos</p>}
+              </div>
+            </div>
+
+            {/* Trips count & km */}
+            <div className="flex flex-wrap gap-4 text-xs text-gray-500 px-1">
+              <span>Viajes: {analyticsTrips.length}</span>
+              <span>KM: {analyticsTrips.reduce((s, t) => s + t.kmRecorridos, 0).toFixed(1)} km</span>
+              {aMaint > 0 && <span className="text-cyan-400/70">Mantenimientos: {formatCOP(aMaint)}</span>}
+            </div>
+
+            {/* Hierarchical breakdown */}
+            {analyticsTrips.length === 0 ? (
+              <p className="text-sm text-gray-500 text-center py-8">No hay viajes en este período.</p>
+            ) : (
+              <div className="space-y-3">
+                {(() => {
+                  // Group by ISO week, then by day
+                  const weekMap = new Map<number, TripWithVehicle[]>();
+                  analyticsTrips.forEach(t => {
+                    const w = getISOWeek(t.fecha);
+                    if (!weekMap.has(w)) weekMap.set(w, []);
+                    weekMap.get(w)!.push(t);
+                  });
+                  const weeks = Array.from(weekMap.entries()).sort(([a], [b]) => a - b);
+
+                  return weeks.map(([weekNum, weekTrips]) => {
+                    const { start, end } = getWeekStartEnd(analyticsYear, weekNum);
+                    const wKey = `${analyticsYear}-W${weekNum}`;
+                    const wMetrics = calcPeriodMetrics(weekTrips, start, end);
+                    const isWOpen = expandedWeeks.has(wKey);
+                    const totalKM = weekTrips.reduce((s, t) => s + t.kmRecorridos, 0);
+
+                    // Group days within this week (only days that have trips in the month)
+                    const dayMap = new Map<string, TripWithVehicle[]>();
+                    weekTrips.forEach(t => {
+                      const d = t.fecha.slice(0, 10);
+                      if (!dayMap.has(d)) dayMap.set(d, []);
+                      dayMap.get(d)!.push(t);
+                    });
+                    const days = Array.from(dayMap.entries()).sort(([a], [b]) => a.localeCompare(b));
+
                     return (
-                      <div key={cat} className="flex items-center justify-between rounded-lg border border-gray-800 bg-black/30 px-4 py-2 text-sm">
-                        <span className="text-gray-400">{cat === 'SUSPENSION' ? 'Suspensión' : cat.charAt(0) + cat.slice(1).toLowerCase()}</span>
-                        <span className="text-white font-medium">{formatCOP(total)}</span>
+                      <div key={wKey} className="rounded-xl border border-gray-800 bg-black/20 overflow-hidden">
+                        {/* Week header */}
+                        <button onClick={() => toggleWeek(wKey)}
+                          className="w-full flex items-center justify-between px-5 py-4 hover:bg-white/5 transition text-left">
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs text-cyan-400 font-mono font-bold bg-cyan-500/10 px-2 py-1 rounded">
+                              Semana {weekNum}
+                            </span>
+                            <span className="text-xs text-gray-500">{formatShortDate(start)} al {formatShortDate(end)}</span>
+                          </div>
+                          <div className="flex items-center gap-5 text-xs">
+                            <span className="text-gray-500">{weekTrips.length} viajes · {totalKM.toFixed(0)} km</span>
+                            <span className="text-cyan-400 font-medium">10%: {formatCOP(wMetrics.reserve)}</span>
+                            <span className={`font-semibold ${wMetrics.finalNet >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                              {formatCOP(wMetrics.finalNet)}
+                            </span>
+                            <ChevronDown size={16} className={`text-gray-500 transition-transform ${isWOpen ? 'rotate-180' : ''}`} />
+                          </div>
+                        </button>
+
+                        {/* Days */}
+                        {isWOpen && (
+                          <div className="border-t border-gray-800/50">
+                            {days.map(([dayStr, dayTrips]) => {
+                              const dKey = dayStr;
+                              const dMetrics = calcPeriodMetrics(dayTrips, dayStr, dayStr);
+                              const isDOpen = expandedDays.has(dKey);
+                              const dayDate = new Date(dayStr + 'T12:00:00');
+                              const dayName = dayNames[dayDate.getDay()];
+                              return (
+                                <div key={dKey}>
+                                  <button onClick={() => toggleDay(dKey)}
+                                    className="w-full flex items-center justify-between px-6 py-3 hover:bg-white/5 transition text-left border-t border-gray-800/30">
+                                    <div className="flex items-center gap-3">
+                                      <span className="text-xs text-gray-400 font-mono">{formatShortDate(dayStr)}</span>
+                                      <span className="text-xs text-gray-600">{dayName}</span>
+                                    </div>
+                                    <div className="flex items-center gap-4 text-xs">
+                                      <span className="text-gray-500">{dayTrips.length} viajes</span>
+                                      <span className="text-cyan-400/80">10%: {formatCOP(dMetrics.reserve)}</span>
+                                      <span className={`font-medium ${dMetrics.finalNet >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                                        {formatCOP(dMetrics.finalNet)}
+                                      </span>
+                                      <ChevronDown size={14} className={`text-gray-500 transition-transform ${isDOpen ? 'rotate-180' : ''}`} />
+                                    </div>
+                                  </button>
+
+                                  {/* Trips */}
+                                  {isDOpen && (
+                                    <div className="border-t border-gray-800/20 bg-black/20">
+                                      {dayTrips.map(t => {
+                                        const net = calcNetProfit(t);
+                                        return (
+                                          <div key={t.id} className="flex items-center justify-between px-8 py-2.5 text-xs border-t border-gray-800/20">
+                                            <span className="text-gray-500 w-16">{t.vehicle ? `${t.vehicle.marca} ${t.vehicle.modelo}` : `V${t.vehicleId}`}</span>
+                                            <span className="text-green-400 w-24 text-right">{formatCOP(t.ingresoBruto)}</span>
+                                            <span className="text-red-400 w-24 text-right">{formatCOP(t.gastoCombustible)}</span>
+                                            <span className="text-gray-600 w-20 text-right">{t.kmRecorridos.toFixed(0)} km</span>
+                                            <span className={`w-24 text-right font-medium ${net >= 0 ? 'text-cyan-400' : 'text-red-400'}`}>{formatCOP(net)}</span>
+                                          </div>
+                                        );
+                                      })}
+                                      {/* Day reserve & maintenance detail */}
+                                      <div className="flex items-center justify-end gap-4 px-8 py-2 text-[10px] text-gray-600 border-t border-gray-800/20">
+                                        <span>Fondo Reserva 10%: <span className="text-cyan-400/80">{formatCOP(dMetrics.reserve)}</span></span>
+                                        {dMetrics.maint > 0 && <span>Mantenimientos: <span className="text-red-400/80">-{formatCOP(dMetrics.maint)}</span></span>}
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                            {/* Week reserve & maintenance detail */}
+                            <div className="flex items-center justify-end gap-4 px-5 py-2 text-[10px] text-gray-600 border-t border-gray-800/30">
+                              <span>Fondo Reserva 10%: <span className="text-cyan-400/80">{formatCOP(wMetrics.reserve)}</span></span>
+                              {wMetrics.maint > 0 && <span>Mantenimientos: <span className="text-red-400/80">-{formatCOP(wMetrics.maint)}</span></span>}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
-                  })}
-                </div>
+                  });
+                })()}
               </div>
             )}
 
-            {filteredTrips.length > 0 && (
-              <div className="card p-6">
-                <h3 className="mb-4 text-sm font-semibold text-white">
-                  {statsTab === 'diario' ? 'Viajes de Hoy' : statsTab === 'semanal' ? 'Viajes de la Semana' : 'Viajes del Mes'}
-                </h3>
+            {/* Monthly maintenance detail card */}
+            {aMaint > 0 && (
+              <div className="card p-5">
+                <h3 className="text-sm font-semibold text-white mb-3">Mantenimientos Ejecutados en el Período</h3>
                 <div className="space-y-2">
-                  {filteredTrips.map(t => (
-                    <div key={t.id} className="flex items-center justify-between rounded-lg border border-gray-800 bg-black/30 px-4 py-2 text-sm">
-                      <span className="text-gray-400">{t.fecha.slice(0, 10)}</span>
-                      <span className="text-green-400">{formatCOP(t.ingresoBruto)}</span>
-                      <span className="text-red-400">{formatCOP(t.gastoCombustible)}</span>
-                      <span className={calcNetProfit(t) >= 0 ? 'text-cyan-400 font-medium' : 'text-red-400 font-medium'}>{formatCOP(calcNetProfit(t))}</span>
+                  {maintenances.filter(m => m.status === 'REALIZADO' && m.costoReal != null && m.fechaEjecucion &&
+                    m.fechaEjecucion.slice(0, 10) >= `${analyticsYear}-${String(analyticsMonth).padStart(2, '0')}-01` &&
+                    m.fechaEjecucion.slice(0, 10) < (analyticsMonth === 12
+                      ? `${analyticsYear + 1}-01-01`
+                      : `${analyticsYear}-${String(analyticsMonth + 1).padStart(2, '0')}-01`)).map(m => (
+                    <div key={m.id} className="flex items-center justify-between rounded-lg border border-gray-800 bg-black/30 px-4 py-2 text-sm">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-gray-500">[{m.categoria}]</span>
+                        <span className="text-gray-300">{m.descripcion}</span>
+                        <span className="text-[10px] text-gray-600">{m.fechaEjecucion?.slice(0, 10)}</span>
+                      </div>
+                      <span className="text-red-400 font-medium">-{formatCOP(m.costoReal!)}</span>
                     </div>
                   ))}
                 </div>
@@ -1048,11 +1254,11 @@ export default function DriverDashboard() {
           <button onClick={() => setActiveNav('profile')}
             className="mx-4 mb-6 flex w-[calc(100%-32px)] items-center gap-3 rounded-xl border border-gray-800 bg-black/30 px-4 py-3 transition hover:border-cyan-500/30 hover:bg-cyan-500/5 text-left">
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-cyan-500/20 text-sm font-bold text-cyan-300">
-              {photoPreview ? <img src={photoPreview} alt="" className="h-full w-full rounded-full object-cover" /> : (usuario?.nombre?.charAt(0) ?? '?')}
+              {photoPreview ? <img src={photoPreview} alt="" className="h-full w-full rounded-full object-cover" /> : (currentUser?.nombre?.charAt(0) ?? '?')}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white truncate">{usuario?.nombre ?? 'Conductor'}</p>
-              <p className="text-xs text-gray-500 truncate">{usuario?.email ?? ''}</p>
+              <p className="text-sm font-medium text-white truncate">{currentUser?.nombre ?? 'Conductor'}</p>
+              <p className="text-xs text-gray-500 truncate">{currentUser?.email ?? ''}</p>
             </div>
             <ChevronDown size={16} className="text-gray-500 flex-shrink-0" />
           </button>
@@ -1145,6 +1351,45 @@ export default function DriverDashboard() {
       <ConfirmDialog open={docDeleteId !== null} title="Eliminar Documento"
         message="¿Estás seguro de eliminar este documento?" onConfirm={handleDeleteDoc}
         onCancel={() => setDocDeleteId(null)} />
+
+      {/* Complete Maintenance Modal */}
+      {completeMaint && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70" onClick={() => setCompleteMaint(null)}>
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full max-w-sm mx-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-white mb-2">Completar Mantenimiento</h3>
+            <p className="text-sm text-gray-400 mb-4">{completeMaint.descripcion}</p>
+            <label className="block text-xs text-gray-500 mb-1">Costo real ($)</label>
+            <input type="text" value={completeMaint.costoReal}
+              onChange={e => {
+                const raw = e.target.value.replace(/[^0-9]/g, '');
+                setCompleteMaint(prev => prev ? { ...prev, costoReal: raw ? Number(raw).toLocaleString('es-CO') : '' } : null);
+              }}
+              className="input-premium w-full mb-4" placeholder="Ej: 250000" />
+            <div className="flex gap-3">
+              <button onClick={() => setCompleteMaint(null)} className="btn-premium flex-1 bg-gray-700 hover:bg-gray-600">Cancelar</button>
+              <button onClick={handleCompleteMaintenance} className="btn-premium flex-1 bg-green-600 hover:bg-green-500">Completar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Goal Editor Modal */}
+      {editGoal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+            className="w-full max-w-xs mx-4 rounded-2xl border border-gray-700 bg-[#161b22] p-6 shadow-2xl">
+            <h3 className="text-sm font-semibold text-white mb-4">Editar Meta {editGoal.tipo === 'diario' ? 'Diaria' : editGoal.tipo === 'semanal' ? 'Semanal' : 'Mensual'}</h3>
+            <input type="text" inputMode="numeric" value={editGoal.valor}
+              onChange={e => setEditGoal({ ...editGoal, valor: formatMiles(e.target.value) })}
+              placeholder="Monto objetivo" className="input-premium w-full mb-4" />
+            <div className="flex gap-3">
+              <button onClick={() => saveGoal(editGoal.tipo, Number(editGoal.valor.replace(/\./g, '')) || 0)}
+                className="btn-premium flex-1">Guardar</button>
+              <button onClick={() => setEditGoal(null)} className="btn-ghost flex-1">Cancelar</button>
+            </div>
+          </motion.div>
+        </div>
+      )}
     </div>
   );
 }

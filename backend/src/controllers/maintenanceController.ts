@@ -25,6 +25,15 @@ const seedSchema = Joi.object({
   vehicleId: Joi.number().integer().positive().required(),
 });
 
+const completeSchema = Joi.object({
+  costoReal: Joi.number().min(0).required(),
+});
+
+const CATEGORIA_LABELS: Record<string, string> = {
+  MOTOR: 'Motor', FRENOS: 'Frenos', SUSPENSION: 'Suspensión',
+  LLANTAS: 'Llantas', OTROS: 'Otros',
+};
+
 const PLAN_KIA_RIO_XCITE: Array<{ descripcion: string; categoria: string; intervaloKm: number; costoEstimado: number }> = [
   { descripcion: 'Cambio de aceite y filtro', categoria: 'MOTOR', intervaloKm: 5000, costoEstimado: 180000 },
   { descripcion: 'Rotación y balanceo de llantas', categoria: 'LLANTAS', intervaloKm: 10000, costoEstimado: 80000 },
@@ -37,6 +46,8 @@ const PLAN_KIA_RIO_XCITE: Array<{ descripcion: string; categoria: string; interv
   { descripcion: 'Cambio de refrigerante', categoria: 'MOTOR', intervaloKm: 50000, costoEstimado: 100000 },
   { descripcion: 'Cambio de amortiguadores', categoria: 'SUSPENSION', intervaloKm: 80000, costoEstimado: 600000 },
 ];
+
+const seedData = PLAN_KIA_RIO_XCITE.map(p => ({ ...p, status: 'PENDIENTE' }));
 
 export class MaintenanceController {
   static async list(req: Request, res: Response) {
@@ -61,7 +72,7 @@ export class MaintenanceController {
         if (!vehicle) return res.status(404).json({ error: 'Vehículo no encontrado' });
       }
 
-      const maintenance = await prisma.maintenance.create({ data: value });
+      const maintenance = await prisma.maintenance.create({ data: { ...value, status: 'PENDIENTE' } });
       res.status(201).json({ maintenance });
     } catch (error) {
       console.error('Error creating maintenance:', error);
@@ -109,13 +120,41 @@ export class MaintenanceController {
       if (!vehicle) return res.status(404).json({ error: 'Vehículo no encontrado' });
 
       const created = await Promise.all(
-        PLAN_KIA_RIO_XCITE.map(p =>
+        seedData.map(p =>
           prisma.maintenance.create({ data: { ...p, vehicleId: value.vehicleId } })
         )
       );
       res.status(201).json({ maintenances: created });
     } catch (error) {
       console.error('Error seeding maintenance plan:', error);
+      res.status(500).json({ error: 'Error interno del servidor' });
+    }
+  }
+
+  static async complete(req: Request, res: Response) {
+    try {
+      const id = Number(req.params.id);
+      const { error, value } = completeSchema.validate(req.body);
+      if (error) return res.status(400).json({ error: error.details[0].message });
+
+      const existing = await prisma.maintenance.findUnique({ where: { id } });
+      if (!existing) return res.status(404).json({ error: 'Mantenimiento no encontrado' });
+
+      const vehicle = await prisma.vehicle.findUnique({ where: { id: existing.vehicleId! } });
+      if (!vehicle) return res.status(404).json({ error: 'Vehículo no encontrado' });
+
+      const maintenance = await prisma.maintenance.update({
+        where: { id },
+        data: {
+          status: 'REALIZADO',
+          costoReal: value.costoReal,
+          fechaEjecucion: new Date(),
+          kilometrajeRegistro: vehicle.kilometrajeActual,
+        },
+      });
+      res.json({ maintenance });
+    } catch (error) {
+      console.error('Error completing maintenance:', error);
       res.status(500).json({ error: 'Error interno del servidor' });
     }
   }
@@ -134,8 +173,15 @@ export class MaintenanceController {
       });
 
       const alerts = maintenances
-        .map(m => ({ ...m, remainingKm: m.intervaloKm - vehicle.kilometrajeActual }))
-        .filter(m => m.remainingKm <= 1000);
+        .map(m => {
+          const baseKm = m.status === 'REALIZADO' && m.kilometrajeRegistro != null
+            ? m.kilometrajeRegistro
+            : 0;
+          const kmDesdeBase = vehicle.kilometrajeActual - baseKm;
+          const remainingKm = m.intervaloKm - kmDesdeBase;
+          return { ...m, remainingKm, kmDesdeBase };
+        })
+        .filter(m => m.status !== 'REALIZADO' && m.remainingKm <= 1000);
 
       res.json({ alerts });
     } catch (error) {

@@ -11,11 +11,12 @@ datasource db {
 }
 
 model User {
-  id       Int       @id @default(autoincrement())
-  nombre   String
-  email    String    @unique
-  password String
-  role     String    @default("USER")
+  id        Int       @id @default(autoincrement())
+  nombre    String
+  email     String    @unique
+  password  String
+  role      String    @default("USER")
+  avatarUrl String?
   trips       Trip[]
   fuelEntries FuelEntry[]
   vehicles    Vehicle[] @relation("UserVehicles")
@@ -92,13 +93,17 @@ model FuelEntry {
 }
 
 model Maintenance {
-  id            Int      @id @default(autoincrement())
-  descripcion   String
-  categoria     String   @default("OTROS")
-  intervaloKm   Float
-  costoEstimado Float
-  vehicleId     Int?
-  vehicle       Vehicle? @relation(fields: [vehicleId], references: [id])
+  id                 Int       @id @default(autoincrement())
+  descripcion        String
+  categoria          String    @default("OTROS")
+  intervaloKm        Float
+  costoEstimado      Float
+  status             String    @default("PENDIENTE")
+  costoReal          Float?
+  fechaEjecucion     DateTime?
+  kilometrajeRegistro Float?
+  vehicleId          Int?
+  vehicle            Vehicle?  @relation(fields: [vehicleId], references: [id])
 
   @@index([vehicleId])
   @@map("maintenances")
