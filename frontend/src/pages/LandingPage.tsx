@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import Header from '../components/Header';
 
 const streakBg = {
   background: `
@@ -47,20 +48,7 @@ export default function LandingPage() {
       </div>
 
       {/* Navbar */}
-      <nav className="relative z-20 mx-auto flex max-w-6xl items-center justify-between px-6 py-6 lg:px-8">
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-3">
-            <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-cyan-500/15 border border-cyan-400/30">
-              <span className="text-cyan-400 text-sm font-black">D</span>
-            </span>
-            <span className="text-lg font-bold tracking-tight text-white">DriverLog</span>
-          </div>
-          <div className="hidden sm:flex items-center gap-2">
-            <button onClick={() => navigate('/login')} className="btn-ghost text-sm px-4 py-2">Iniciar Sesión</button>
-            <button onClick={() => navigate('/register')} className="btn-premium text-sm px-4 py-2">Registrarse</button>
-          </div>
-        </div>
-      </nav>
+      <Header />
 
       {/* Hero + Content */}
       <main className="relative z-10 mx-auto flex min-h-[calc(100vh-80px)] max-w-6xl flex-col items-center justify-center px-6 py-16">
